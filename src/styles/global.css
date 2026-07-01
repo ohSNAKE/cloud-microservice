@@ -8,7 +8,8 @@ html,
 body,
 #root {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
@@ -16,17 +17,26 @@ body,
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── App shell ── */
-.app-sider {
-  border-right: 1px solid var(--color-border-light) !important;
-  background: var(--color-sider) !important;
+.app-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell > .ant-layout-sider {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell > .ant-layout-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
 }
 
 .app-sider__brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 18px 16px;
+  padding: calc(18px + var(--titlebar-inset)) 16px 18px;
   margin-bottom: 4px;
 }
 
@@ -34,6 +44,20 @@ body,
   border-bottom: 1px solid var(--color-border-light);
   margin-bottom: 8px;
   padding-bottom: 16px;
+}
+
+.app-main {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ── App shell ── */
+.app-sider {
+  border-right: 1px solid var(--color-border-light) !important;
+  background: var(--color-sider) !important;
 }
 
 .app-sider__logo {
@@ -60,13 +84,21 @@ body,
 .app-header {
   background: var(--color-surface) !important;
   border-bottom: 1px solid var(--color-border-light);
-  padding: 0 24px !important;
-  height: var(--header-height) !important;
+  padding: var(--titlebar-inset) 24px 0 !important;
+  height: calc(var(--header-height) + var(--titlebar-inset)) !important;
   line-height: normal !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.app-header__drag {
+  flex: 1;
+  min-width: 0;
+  cursor: default;
 }
 
 .app-header__title {
@@ -81,8 +113,13 @@ body,
 }
 
 .app-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px 24px 32px !important;
   max-width: var(--content-max-width);
+  background: var(--color-bg);
 }
 
 .app-content-inner {

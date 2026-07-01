@@ -16,6 +16,7 @@ import {
   type ResolvedTheme,
   type ThemeMode,
 } from "../theme/types";
+import { applyTitlebarInset, syncNativeWindowTheme } from "../theme/windowTheme";
 
 interface ThemeContextValue {
   mode: ThemeMode;
@@ -74,7 +75,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyThemeToDocument(resolved);
+    applyTitlebarInset();
+    void syncNativeWindowTheme(resolved);
   }, [resolved]);
+
+  useEffect(() => {
+    applyTitlebarInset();
+  }, []);
 
   useEffect(() => {
     if (mode !== "system") return;

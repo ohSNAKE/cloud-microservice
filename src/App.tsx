@@ -70,7 +70,7 @@ function AppLayout() {
 
   return (
     <QuickAddProvider openQuickAdd={openQuickAdd}>
-      <Layout style={{ minHeight: "100vh" }}>
+      <Layout className="app-shell">
         <Sider
           className="app-sider"
           collapsible
@@ -93,9 +93,9 @@ function AppLayout() {
             onClick={({ key }) => navigate(key)}
           />
         </Sider>
-        <Layout>
+        <Layout className="app-main">
           <Header className="app-header">
-            <div>
+            <div className="app-header__drag" data-tauri-drag-region>
               <Typography.Text className="app-header__title">{meta.title}</Typography.Text>
               <Typography.Paragraph className="app-header__subtitle" style={{ margin: 0 }}>
                 {meta.subtitle}
