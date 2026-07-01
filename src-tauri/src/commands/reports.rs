@@ -55,3 +55,34 @@ pub fn get_category_stats(
 
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn get_portfolio_history(state: State<AppState>, days: Option<i64>) -> Result<Vec<crate::models::PortfolioHistoryPoint>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let limit = days.unwrap_or(30);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT date(ph.recorded_at) as d,
+                    SUM(ph.price * h.quantity) as total_value
+             FROM price_history ph
+             JOIN holdings h ON h.id = ph.holding_id
+             GROUP BY d
+             ORDER BY d DESC
+             LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(params![limit], |row| {
+            Ok(crate::models::PortfolioHistoryPoint {
+                date: row.get(0)?,
+                total_value: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut points: Vec<_> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    points.reverse();
+    Ok(points)
+}

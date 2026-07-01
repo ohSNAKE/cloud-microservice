@@ -230,3 +230,65 @@ pub struct HoldingRow {
     pub current_price: f64,
     pub market: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Budget {
+    pub id: i64,
+    pub category_id: i64,
+    pub category_name: String,
+    pub category_icon: String,
+    pub month: String,
+    pub amount: f64,
+    pub spent: f64,
+    pub remaining: f64,
+    pub usage_rate: f64,
+    pub is_over: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NewBudget {
+    pub category_id: i64,
+    pub month: String,
+    pub amount: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BudgetAlert {
+    pub category_name: String,
+    pub category_icon: String,
+    pub budget: f64,
+    pub spent: f64,
+    pub over_amount: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RecurringRule {
+    pub id: i64,
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub account_id: Option<i64>,
+    pub note: String,
+    pub day_of_month: i64,
+    pub enabled: bool,
+    pub last_run_month: Option<String>,
+    pub category_name: Option<String>,
+    pub category_icon: Option<String>,
+    pub account_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NewRecurringRule {
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub account_id: Option<i64>,
+    pub note: Option<String>,
+    pub day_of_month: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PortfolioHistoryPoint {
+    pub date: String,
+    pub total_value: f64,
+}

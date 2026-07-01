@@ -172,6 +172,62 @@ export interface KlineData {
 
 export type KlinePeriod = "day" | "week" | "month";
 
+export interface Budget {
+  id: number;
+  category_id: number;
+  category_name: string;
+  category_icon: string;
+  month: string;
+  amount: number;
+  spent: number;
+  remaining: number;
+  usage_rate: number;
+  is_over: boolean;
+}
+
+export interface NewBudget {
+  category_id: number;
+  month: string;
+  amount: number;
+}
+
+export interface BudgetAlert {
+  category_name: string;
+  category_icon: string;
+  budget: number;
+  spent: number;
+  over_amount: number;
+}
+
+export interface RecurringRule {
+  id: number;
+  type: "income" | "expense";
+  amount: number;
+  category_id: number | null;
+  account_id: number | null;
+  note: string;
+  day_of_month: number;
+  enabled: boolean;
+  last_run_month: string | null;
+  category_name: string | null;
+  category_icon: string | null;
+  account_name: string | null;
+}
+
+export interface NewRecurringRule {
+  type: "income" | "expense";
+  amount: number;
+  category_id?: number;
+  account_id?: number;
+  note?: string;
+  day_of_month: number;
+}
+
+export interface PortfolioHistoryPoint {
+  date: string;
+  total_value: number;
+}
+
 export const ACCOUNT_TYPES = [
   { label: "现金", value: "cash" },
   { label: "银行卡", value: "bank" },

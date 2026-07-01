@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Account,
+  Budget,
+  BudgetAlert,
   Category,
   CategoryStat,
   DashboardSummary,
@@ -8,6 +10,10 @@ import type {
   KlineData,
   KlinePeriod,
   MonthlyStat,
+  NewBudget,
+  NewRecurringRule,
+  PortfolioHistoryPoint,
+  RecurringRule,
   NewAccount,
   NewCategory,
   NewHolding,
@@ -47,6 +53,19 @@ export const api = {
   getMonthlyStats: (months?: number) => invoke<MonthlyStat[]>("get_monthly_stats", { months }),
   getCategoryStats: (month?: string, kind?: string) =>
     invoke<CategoryStat[]>("get_category_stats", { month, kind }),
+  getPortfolioHistory: (days?: number) =>
+    invoke<PortfolioHistoryPoint[]>("get_portfolio_history", { days }),
+
+  listBudgets: (month?: string) => invoke<Budget[]>("list_budgets", { month }),
+  setBudget: (input: NewBudget) => invoke<Budget>("set_budget", { input }),
+  deleteBudget: (id: number) => invoke<void>("delete_budget", { id }),
+  getBudgetAlerts: (month?: string) => invoke<BudgetAlert[]>("get_budget_alerts", { month }),
+
+  listRecurringRules: () => invoke<RecurringRule[]>("list_recurring_rules"),
+  addRecurringRule: (input: NewRecurringRule) => invoke<RecurringRule>("add_recurring_rule", { input }),
+  toggleRecurringRule: (id: number, enabled: boolean) =>
+    invoke<void>("toggle_recurring_rule", { id, enabled }),
+  deleteRecurringRule: (id: number) => invoke<void>("delete_recurring_rule", { id }),
 
   listHoldings: () => invoke<Holding[]>("list_holdings"),
   addHolding: (input: NewHolding) => invoke<Holding>("add_holding", { input }),

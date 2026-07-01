@@ -73,6 +73,30 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
             value TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id INTEGER NOT NULL,
+            month TEXT NOT NULL,
+            amount REAL NOT NULL,
+            UNIQUE(category_id, month),
+            FOREIGN KEY (category_id) REFERENCES categories(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS recurring_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            amount REAL NOT NULL,
+            category_id INTEGER,
+            account_id INTEGER,
+            note TEXT DEFAULT '',
+            day_of_month INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            last_run_month TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (category_id) REFERENCES categories(id),
+            FOREIGN KEY (account_id) REFERENCES accounts(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
         CREATE INDEX IF NOT EXISTS idx_price_history_holding ON price_history(holding_id, recorded_at);
         ",
@@ -99,6 +123,34 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
             [],
         )?;
     }
+
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id INTEGER NOT NULL,
+            month TEXT NOT NULL,
+            amount REAL NOT NULL,
+            UNIQUE(category_id, month),
+            FOREIGN KEY (category_id) REFERENCES categories(id)
+        );
+        CREATE TABLE IF NOT EXISTS recurring_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            amount REAL NOT NULL,
+            category_id INTEGER,
+            account_id INTEGER,
+            note TEXT DEFAULT '',
+            day_of_month INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            last_run_month TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (category_id) REFERENCES categories(id),
+            FOREIGN KEY (account_id) REFERENCES accounts(id)
+        );
+        ",
+    )?;
+
     Ok(())
 }
 

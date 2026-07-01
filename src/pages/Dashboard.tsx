@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Col, Empty, Row, Spin, Statistic, Typography } from "antd";
+import { Button, Card, Col, Empty, Row, Spin, Statistic, Typography, Alert } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -10,23 +10,26 @@ import {
 } from "@ant-design/icons";
 import ReactECharts from "echarts-for-react";
 import { api, formatMoney } from "../api";
-import type { DashboardSummary, MonthlyStat } from "../types";
+import type { BudgetAlert, DashboardSummary, MonthlyStat } from "../types";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
+  const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [dashboard, monthly] = await Promise.all([
+      const [dashboard, monthly, alerts] = await Promise.all([
         api.getDashboard(),
         api.getMonthlyStats(6),
+        api.getBudgetAlerts(),
       ]);
       setSummary(dashboard);
       setMonthlyStats(monthly);
+      setBudgetAlerts(alerts);
     } finally {
       setLoading(false);
     }
@@ -134,6 +137,25 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {budgetAlerts.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="预算超支提醒"
+          description={
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {budgetAlerts.map((a) => (
+                <li key={a.category_name}>
+                  {a.category_icon} {a.category_name}：已用 {formatMoney(a.spent)} / 预算 {formatMoney(a.budget)}，超出 {formatMoney(a.over_amount)}
+                </li>
+              ))}
+            </ul>
+          }
+          action={<Button size="small" onClick={() => navigate("/reports")}>查看预算</Button>}
+        />
+      )}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>

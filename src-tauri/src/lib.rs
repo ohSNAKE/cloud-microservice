@@ -4,20 +4,34 @@ pub mod commands;
 pub mod services;
 
 use commands::holdings::refresh_all_quotes;
+use commands::recurring::process_recurring_rules;
 use commands::settings::should_refresh_on_startup;
 use db::init_db;
 use services::scheduler::start_quote_scheduler;
+use std::str::FromStr;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
+}
+
+fn register_global_shortcuts(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let shortcut = Shortcut::from_str("CommandOrControl+N")?;
+    app.global_shortcut().on_shortcut(shortcut, |app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            let _ = app.emit("quick-add-transaction", ());
+        }
+    })?;
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let conn = init_db(app.handle()).map_err(|e| e.to_string())?;
             app.manage(AppState {
@@ -25,9 +39,14 @@ pub fn run() {
             });
             start_quote_scheduler(app.handle().clone());
 
+            if let Err(err) = register_global_shortcuts(app.handle()) {
+                eprintln!("全局快捷键注册失败: {err}");
+            }
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<AppState>();
+                let _ = process_recurring_rules(&state);
                 if should_refresh_on_startup(&state) {
                     let _ = refresh_all_quotes(&state).await;
                 }
@@ -52,6 +71,15 @@ pub fn run() {
             commands::get_dashboard,
             commands::get_monthly_stats,
             commands::get_category_stats,
+            commands::get_portfolio_history,
+            commands::list_budgets,
+            commands::set_budget,
+            commands::delete_budget,
+            commands::get_budget_alerts,
+            commands::list_recurring_rules,
+            commands::add_recurring_rule,
+            commands::toggle_recurring_rule,
+            commands::delete_recurring_rule,
             commands::list_holdings,
             commands::add_holding,
             commands::update_holding,

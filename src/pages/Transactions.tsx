@@ -29,6 +29,8 @@ import type {
   Category,
   NewAccount,
   NewCategory,
+  NewRecurringRule,
+  RecurringRule,
   Transaction,
   UpdateAccount,
   UpdateCategory,
@@ -60,11 +62,14 @@ export default function TransactionsPage() {
   const [categoryForm] = Form.useForm();
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [recurringRules, setRecurringRules] = useState<RecurringRule[]>([]);
+  const [recurringModal, setRecurringModal] = useState(false);
+  const [recurringForm] = Form.useForm();
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [txList, incomeCats, expenseCats, accountList] = await Promise.all([
+      const [txList, incomeCats, expenseCats, accountList, recurring] = await Promise.all([
         api.listTransactions({
           month,
           account_id: accountFilter,
@@ -75,10 +80,12 @@ export default function TransactionsPage() {
         api.listCategories("income"),
         api.listCategories("expense"),
         api.listAccounts(),
+        api.listRecurringRules(),
       ]);
       setTransactions(txList);
       setCategories([...incomeCats, ...expenseCats]);
       setAccounts(accountList);
+      setRecurringRules(recurring);
     } finally {
       setLoading(false);
     }
@@ -191,6 +198,15 @@ export default function TransactionsPage() {
       message.success("分类已添加");
     }
     setCategoryModal(false);
+    loadData();
+  };
+
+  const saveRecurring = async () => {
+    const values = await recurringForm.validateFields();
+    await api.addRecurringRule(values as NewRecurringRule);
+    message.success("周期记账已添加，将在每月指定日期自动记账");
+    setRecurringModal(false);
+    recurringForm.resetFields();
     loadData();
   };
 
@@ -375,6 +391,48 @@ export default function TransactionsPage() {
                 </>
               ),
             },
+            {
+              key: "recurring",
+              label: "周期记账",
+              children: (
+                <>
+                  <Button type="primary" style={{ marginBottom: 12 }} onClick={() => { recurringForm.resetFields(); recurringForm.setFieldsValue({ type: "expense", day_of_month: 1 }); setRecurringModal(true); }}>
+                    添加周期规则
+                  </Button>
+                  <Table<RecurringRule>
+                    rowKey="id"
+                    dataSource={recurringRules}
+                    pagination={false}
+                    locale={{ emptyText: "如工资、房租等固定收支，可在此设置自动记账" }}
+                    columns={[
+                      { title: "类型", dataIndex: "type", render: (t: string) => (t === "income" ? "收入" : "支出") },
+                      { title: "金额", dataIndex: "amount", render: (v: number) => formatMoney(v) },
+                      { title: "分类", render: (_, r) => `${r.category_icon ?? ""} ${r.category_name ?? "-"}` },
+                      { title: "账户", dataIndex: "account_name", render: (v) => v ?? "-" },
+                      { title: "每月", dataIndex: "day_of_month", render: (d: number) => `${d} 日` },
+                      { title: "上次执行", dataIndex: "last_run_month", render: (v) => v ?? "未执行" },
+                      {
+                        title: "启用",
+                        dataIndex: "enabled",
+                        render: (enabled: boolean, r) => (
+                          <Button type="link" onClick={async () => { await api.toggleRecurringRule(r.id, !enabled); loadData(); }}>
+                            {enabled ? "已启用" : "已停用"}
+                          </Button>
+                        ),
+                      },
+                      {
+                        title: "操作",
+                        render: (_, r) => (
+                          <Popconfirm title="确认删除？" onConfirm={async () => { await api.deleteRecurringRule(r.id); message.success("已删除"); loadData(); }}>
+                            <Button type="link" danger>删除</Button>
+                          </Popconfirm>
+                        ),
+                      },
+                    ]}
+                  />
+                </>
+              ),
+            },
           ]}
         />
       </Card>
@@ -452,6 +510,27 @@ export default function TransactionsPage() {
             <Select options={[{ label: "支出", value: "expense" }, { label: "收入", value: "income" }]} disabled={!!editingCategory} />
           </Form.Item>
           <Form.Item name="icon" label="图标"><Input placeholder="如 🍜" /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title="添加周期记账" open={recurringModal} onCancel={() => setRecurringModal(false)} onOk={saveRecurring} destroyOnClose>
+        <Form form={recurringForm} layout="vertical">
+          <Form.Item name="type" label="类型" rules={[{ required: true }]}>
+            <Select options={[{ label: "支出", value: "expense" }, { label: "收入", value: "income" }]} />
+          </Form.Item>
+          <Form.Item name="amount" label="金额" rules={[{ required: true }]}>
+            <InputNumber min={0.01} precision={2} style={{ width: "100%" }} prefix="¥" />
+          </Form.Item>
+          <Form.Item name="category_id" label="分类" rules={[{ required: true }]}>
+            <Select options={categories.map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))} />
+          </Form.Item>
+          <Form.Item name="account_id" label="账户" rules={[{ required: true }]}>
+            <Select options={accounts.map((a) => ({ label: a.name, value: a.id }))} />
+          </Form.Item>
+          <Form.Item name="day_of_month" label="每月几号记账" rules={[{ required: true }]}>
+            <InputNumber min={1} max={28} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="note" label="备注"><Input placeholder="如：房租、工资" /></Form.Item>
         </Form>
       </Modal>
     </div>
