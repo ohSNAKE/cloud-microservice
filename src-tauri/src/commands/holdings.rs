@@ -195,6 +195,7 @@ pub async fn refresh_all_quotes(state: &AppState) -> Result<QuoteRefreshResult, 
 
     let mut updated = 0usize;
     let mut failed = 0usize;
+    let mut failed_codes = Vec::new();
     let recorded_at = format!("{} {}", today(), chrono::Local::now().format("%H:%M:%S"));
 
     for (id, code, kind) in holdings {
@@ -219,7 +220,10 @@ pub async fn refresh_all_quotes(state: &AppState) -> Result<QuoteRefreshResult, 
                 .ok();
                 updated += 1;
             }
-            _ => failed += 1,
+            _ => {
+                failed += 1;
+                failed_codes.push(code);
+            }
         }
     }
 
@@ -237,6 +241,7 @@ pub async fn refresh_all_quotes(state: &AppState) -> Result<QuoteRefreshResult, 
         updated,
         failed,
         message: format!("已更新 {updated} 条，失败 {failed} 条"),
+        failed_codes,
     })
 }
 

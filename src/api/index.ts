@@ -2,27 +2,51 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Account,
   Category,
+  CategoryStat,
   DashboardSummary,
   Holding,
   KlineData,
   KlinePeriod,
   MonthlyStat,
+  NewAccount,
+  NewCategory,
   NewHolding,
   NewTransaction,
   QuoteRefreshResult,
   Settings,
   Transaction,
+  TransactionFilter,
+  TransferInput,
+  UpdateAccount,
+  UpdateCategory,
+  UpdateTransaction,
 } from "../types";
 
 export const api = {
   listAccounts: () => invoke<Account[]>("list_accounts"),
+  addAccount: (input: NewAccount) => invoke<Account>("add_account", { input }),
+  updateAccount: (id: number, input: UpdateAccount) =>
+    invoke<Account>("update_account", { id, input }),
+  deleteAccount: (id: number) => invoke<void>("delete_account", { id }),
+
   listCategories: (type?: string) => invoke<Category[]>("list_categories", { kind: type }),
-  listTransactions: (month?: string) => invoke<Transaction[]>("list_transactions", { month }),
+  addCategory: (input: NewCategory) => invoke<Category>("add_category", { input }),
+  updateCategory: (id: number, input: UpdateCategory) =>
+    invoke<Category>("update_category", { id, input }),
+  deleteCategory: (id: number) => invoke<void>("delete_category", { id }),
+
+  listTransactions: (filter?: TransactionFilter) =>
+    invoke<Transaction[]>("list_transactions", { filter }),
   addTransaction: (input: NewTransaction) => invoke<Transaction>("add_transaction", { input }),
+  updateTransaction: (id: number, input: UpdateTransaction) =>
+    invoke<Transaction>("update_transaction", { id, input }),
   deleteTransaction: (id: number) => invoke<void>("delete_transaction", { id }),
+  addTransfer: (input: TransferInput) => invoke<Transaction>("add_transfer", { input }),
 
   getDashboard: () => invoke<DashboardSummary>("get_dashboard"),
   getMonthlyStats: (months?: number) => invoke<MonthlyStat[]>("get_monthly_stats", { months }),
+  getCategoryStats: (month?: string, kind?: string) =>
+    invoke<CategoryStat[]>("get_category_stats", { month, kind }),
 
   listHoldings: () => invoke<Holding[]>("list_holdings"),
   addHolding: (input: NewHolding) => invoke<Holding>("add_holding", { input }),
@@ -36,6 +60,10 @@ export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),
   getLastSyncAt: () => invoke<string | null>("get_last_sync_at"),
+
+  getDbPath: () => invoke<string>("get_db_path"),
+  exportData: () => invoke<string>("export_data"),
+  importData: (json: string) => invoke<void>("import_data", { json }),
 };
 
 export function formatMoney(value: number, currency = "CNY") {
@@ -49,4 +77,15 @@ export function formatMoney(value: number, currency = "CNY") {
 export function formatPercent(value: number) {
   const prefix = value > 0 ? "+" : "";
   return `${prefix}${value.toFixed(2)}%`;
+}
+
+export function accountTypeLabel(type: string) {
+  const map: Record<string, string> = {
+    cash: "现金",
+    bank: "银行卡",
+    alipay: "支付宝",
+    wechat: "微信",
+    broker: "证券账户",
+  };
+  return map[type] ?? type;
 }

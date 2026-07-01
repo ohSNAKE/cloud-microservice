@@ -10,10 +10,37 @@ pub struct Account {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NewAccount {
+    pub name: String,
+    pub r#type: String,
+    pub balance: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateAccount {
+    pub name: String,
+    pub r#type: String,
+    pub balance: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Category {
     pub id: i64,
     pub name: String,
     pub r#type: String,
+    pub icon: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NewCategory {
+    pub name: String,
+    pub r#type: String,
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateCategory {
+    pub name: String,
     pub icon: String,
 }
 
@@ -24,12 +51,14 @@ pub struct Transaction {
     pub amount: f64,
     pub category_id: Option<i64>,
     pub account_id: Option<i64>,
+    pub transfer_to_account_id: Option<i64>,
     pub note: String,
     pub transaction_date: String,
     pub created_at: String,
     pub category_name: Option<String>,
     pub category_icon: Option<String>,
     pub account_name: Option<String>,
+    pub transfer_to_account_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -40,6 +69,34 @@ pub struct NewTransaction {
     pub account_id: Option<i64>,
     pub note: Option<String>,
     pub transaction_date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateTransaction {
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub account_id: Option<i64>,
+    pub note: Option<String>,
+    pub transaction_date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TransferInput {
+    pub from_account_id: i64,
+    pub to_account_id: i64,
+    pub amount: f64,
+    pub note: Option<String>,
+    pub transaction_date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct TransactionFilter {
+    pub month: Option<String>,
+    pub account_id: Option<i64>,
+    pub category_id: Option<i64>,
+    pub tx_type: Option<String>,
+    pub keyword: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -79,6 +136,8 @@ pub struct PricePoint {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DashboardSummary {
     pub total_assets: f64,
+    pub liquid_assets: f64,
+    pub broker_balance: f64,
     pub account_balance: f64,
     pub holding_value: f64,
     pub holding_profit: f64,
@@ -87,6 +146,7 @@ pub struct DashboardSummary {
     pub month_balance: f64,
     pub holding_count: i64,
     pub transaction_count: i64,
+    pub is_empty: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -97,15 +157,19 @@ pub struct MonthlyStat {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AssetDistribution {
-    pub name: String,
-    pub value: f64,
+pub struct CategoryStat {
+    pub category_id: i64,
+    pub category_name: String,
+    pub category_icon: String,
+    pub amount: f64,
+    pub percentage: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Settings {
     pub quote_update_interval: i64,
     pub quote_update_enabled: bool,
+    pub refresh_on_startup: bool,
     pub currency: String,
 }
 
@@ -114,6 +178,7 @@ pub struct QuoteRefreshResult {
     pub updated: usize,
     pub failed: usize,
     pub message: String,
+    pub failed_codes: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -131,4 +196,37 @@ pub struct KlineBar {
 pub struct KlineData {
     pub bars: Vec<KlineBar>,
     pub chart_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExportPayload {
+    pub version: String,
+    pub exported_at: String,
+    pub accounts: Vec<Account>,
+    pub categories: Vec<Category>,
+    pub transactions: Vec<TransactionRow>,
+    pub holdings: Vec<HoldingRow>,
+    pub settings: Vec<(String, String)>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TransactionRow {
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub account_id: Option<i64>,
+    pub transfer_to_account_id: Option<i64>,
+    pub note: String,
+    pub transaction_date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HoldingRow {
+    pub code: String,
+    pub name: String,
+    pub r#type: String,
+    pub quantity: f64,
+    pub cost_price: f64,
+    pub current_price: f64,
+    pub market: String,
 }

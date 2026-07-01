@@ -14,6 +14,9 @@ pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
         quote_update_enabled: get_setting(&conn, "quote_update_enabled")
             .map(|v| v == "true")
             .unwrap_or(true),
+        refresh_on_startup: get_setting(&conn, "refresh_on_startup")
+            .map(|v| v == "true")
+            .unwrap_or(true),
         currency: get_setting(&conn, "currency").unwrap_or_else(|| "CNY".to_string()),
     })
 }
@@ -29,6 +32,10 @@ pub fn update_settings(state: State<AppState>, settings: Settings) -> Result<Set
         (
             "quote_update_enabled",
             settings.quote_update_enabled.to_string(),
+        ),
+        (
+            "refresh_on_startup",
+            settings.refresh_on_startup.to_string(),
         ),
         ("currency", settings.currency.clone()),
     ];
@@ -57,4 +64,14 @@ pub fn update_settings(state: State<AppState>, settings: Settings) -> Result<Set
 pub fn get_last_sync_at(state: State<AppState>) -> Result<Option<String>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     Ok(get_setting(&conn, "last_sync_at"))
+}
+
+pub fn should_refresh_on_startup(state: &AppState) -> bool {
+    let conn = match state.db.lock() {
+        Ok(c) => c,
+        Err(_) => return true,
+    };
+    get_setting(&conn, "refresh_on_startup")
+        .map(|v| v == "true")
+        .unwrap_or(true)
 }

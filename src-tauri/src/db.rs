@@ -38,11 +38,13 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
             amount REAL NOT NULL,
             category_id INTEGER,
             account_id INTEGER,
+            transfer_to_account_id INTEGER,
             note TEXT DEFAULT '',
             transaction_date TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (category_id) REFERENCES categories(id),
-            FOREIGN KEY (account_id) REFERENCES accounts(id)
+            FOREIGN KEY (account_id) REFERENCES accounts(id),
+            FOREIGN KEY (transfer_to_account_id) REFERENCES accounts(id)
         );
 
         CREATE TABLE IF NOT EXISTS holdings (
@@ -76,22 +78,39 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
         ",
     )?;
 
+    migrate(&conn)?;
     seed_defaults(&conn)?;
     Ok(conn)
 }
 
+fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let has_transfer_col: bool = conn
+        .prepare("PRAGMA table_info(transactions)")?
+        .query_map([], |row| {
+            let name: String = row.get(1)?;
+            Ok(name == "transfer_to_account_id")
+        })?
+        .filter_map(Result::ok)
+        .any(|v| v);
+
+    if !has_transfer_col {
+        conn.execute(
+            "ALTER TABLE transactions ADD COLUMN transfer_to_account_id INTEGER",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let account_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM accounts",
-        [],
-        |row| row.get(0),
-    )?;
+    let account_count: i64 = conn.query_row("SELECT COUNT(*) FROM accounts", [], |row| row.get(0))?;
     if account_count == 0 {
         for (name, kind) in [
             ("现金", "cash"),
             ("银行卡", "bank"),
             ("支付宝", "alipay"),
             ("微信", "wechat"),
+            ("证券账户", "broker"),
         ] {
             conn.execute(
                 "INSERT INTO accounts (name, type, balance) VALUES (?1, ?2, 0)",
@@ -100,11 +119,8 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
         }
     }
 
-    let category_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM categories",
-        [],
-        |row| row.get(0),
-    )?;
+    let category_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))?;
     if category_count == 0 {
         let categories = [
             ("餐饮", "expense", "🍜"),
@@ -128,15 +144,12 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
         }
     }
 
-    let settings_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM settings",
-        [],
-        |row| row.get(0),
-    )?;
+    let settings_count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
     if settings_count == 0 {
         for (key, value) in [
             ("quote_update_interval", "30"),
             ("quote_update_enabled", "true"),
+            ("refresh_on_startup", "true"),
             ("currency", "CNY"),
         ] {
             conn.execute(
@@ -144,6 +157,11 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
                 params![key, value],
             )?;
         }
+    } else {
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('refresh_on_startup', 'true')",
+            [],
+        )?;
     }
 
     Ok(())

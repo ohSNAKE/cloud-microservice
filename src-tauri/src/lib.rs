@@ -3,6 +3,8 @@ pub mod models;
 pub mod commands;
 pub mod services;
 
+use commands::holdings::refresh_all_quotes;
+use commands::settings::should_refresh_on_startup;
 use db::init_db;
 use services::scheduler::start_quote_scheduler;
 use std::sync::Mutex;
@@ -22,16 +24,34 @@ pub fn run() {
                 db: Mutex::new(conn),
             });
             start_quote_scheduler(app.handle().clone());
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state = handle.state::<AppState>();
+                if should_refresh_on_startup(&state) {
+                    let _ = refresh_all_quotes(&state).await;
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_accounts,
+            commands::add_account,
+            commands::update_account,
+            commands::delete_account,
             commands::list_categories,
+            commands::add_category,
+            commands::update_category,
+            commands::delete_category,
             commands::list_transactions,
             commands::add_transaction,
+            commands::update_transaction,
             commands::delete_transaction,
+            commands::add_transfer,
             commands::get_dashboard,
             commands::get_monthly_stats,
+            commands::get_category_stats,
             commands::list_holdings,
             commands::add_holding,
             commands::update_holding,
@@ -42,6 +62,9 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::get_last_sync_at,
+            commands::get_db_path,
+            commands::export_data,
+            commands::import_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

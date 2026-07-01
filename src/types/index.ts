@@ -6,6 +6,18 @@ export interface Account {
   created_at: string;
 }
 
+export interface NewAccount {
+  name: string;
+  type: string;
+  balance?: number;
+}
+
+export interface UpdateAccount {
+  name: string;
+  type: string;
+  balance: number;
+}
+
 export interface Category {
   id: number;
   name: string;
@@ -13,18 +25,31 @@ export interface Category {
   icon: string;
 }
 
+export interface NewCategory {
+  name: string;
+  type: "income" | "expense";
+  icon?: string;
+}
+
+export interface UpdateCategory {
+  name: string;
+  icon: string;
+}
+
 export interface Transaction {
   id: number;
-  type: "income" | "expense";
+  type: "income" | "expense" | "transfer";
   amount: number;
   category_id: number | null;
   account_id: number | null;
+  transfer_to_account_id: number | null;
   note: string;
   transaction_date: string;
   created_at: string;
   category_name: string | null;
   category_icon: string | null;
   account_name: string | null;
+  transfer_to_account_name: string | null;
 }
 
 export interface NewTransaction {
@@ -34,6 +59,31 @@ export interface NewTransaction {
   account_id?: number;
   note?: string;
   transaction_date: string;
+}
+
+export interface UpdateTransaction {
+  type: "income" | "expense";
+  amount: number;
+  category_id?: number;
+  account_id?: number;
+  note?: string;
+  transaction_date: string;
+}
+
+export interface TransferInput {
+  from_account_id: number;
+  to_account_id: number;
+  amount: number;
+  note?: string;
+  transaction_date: string;
+}
+
+export interface TransactionFilter {
+  month?: string;
+  account_id?: number;
+  category_id?: number;
+  tx_type?: string;
+  keyword?: string;
 }
 
 export interface Holding {
@@ -64,6 +114,8 @@ export interface NewHolding {
 
 export interface DashboardSummary {
   total_assets: number;
+  liquid_assets: number;
+  broker_balance: number;
   account_balance: number;
   holding_value: number;
   holding_profit: number;
@@ -72,6 +124,7 @@ export interface DashboardSummary {
   month_balance: number;
   holding_count: number;
   transaction_count: number;
+  is_empty: boolean;
 }
 
 export interface MonthlyStat {
@@ -80,9 +133,18 @@ export interface MonthlyStat {
   expense: number;
 }
 
+export interface CategoryStat {
+  category_id: number;
+  category_name: string;
+  category_icon: string;
+  amount: number;
+  percentage: number;
+}
+
 export interface Settings {
   quote_update_interval: number;
   quote_update_enabled: boolean;
+  refresh_on_startup: boolean;
   currency: string;
 }
 
@@ -90,6 +152,7 @@ export interface QuoteRefreshResult {
   updated: number;
   failed: number;
   message: string;
+  failed_codes: string[];
 }
 
 export interface KlineBar {
@@ -108,3 +171,11 @@ export interface KlineData {
 }
 
 export type KlinePeriod = "day" | "week" | "month";
+
+export const ACCOUNT_TYPES = [
+  { label: "现金", value: "cash" },
+  { label: "银行卡", value: "bank" },
+  { label: "支付宝", value: "alipay" },
+  { label: "微信", value: "wechat" },
+  { label: "证券账户", value: "broker" },
+];
