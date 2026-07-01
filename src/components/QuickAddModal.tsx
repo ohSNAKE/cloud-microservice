@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   Button,
   DatePicker,
@@ -11,6 +12,7 @@ import {
   Row,
   Col,
   Select,
+  Skeleton,
   Space,
   Spin,
   Tabs,
@@ -18,7 +20,7 @@ import {
   Typography,
   message,
 } from "antd";
-import { DeleteOutlined, RobotOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { LoadingOutlined, DeleteOutlined, RobotOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { api } from "../api";
 import type { Account, Category, ParsedTransactionDraft } from "../types";
@@ -211,9 +213,11 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
       message.warning("请输入记账内容");
       return;
     }
-    setParsing(true);
-    setConfirmItems([]);
-    setBatchMeta(null);
+    flushSync(() => {
+      setParsing(true);
+      setConfirmItems([]);
+      setBatchMeta(null);
+    });
     try {
       const result = await api.parseTransactionNl(text);
       if (result.parse_notice) {
@@ -323,103 +327,113 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
               </span>
             ),
             children: (
-              <div style={{ display: "flex", gap: 16, minHeight: 400 }}>
-                <div
-                  style={{
-                    flex: "0 0 340px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                  }}
-                >
-                  <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                    支持多条描述，用分号或「还有」分隔
-                  </Typography.Text>
-                  <Input.TextArea
-                    value={nlText}
-                    onChange={(e) => setNlText(e.target.value)}
-                    placeholder="例如：微信买了报纸；支付宝花了三块钱面包"
-                    autoSize={{ minRows: 10, maxRows: 14 }}
-                    disabled={parsing}
-                    autoFocus
-                  />
-                  <Button
-                    type="primary"
-                    icon={<ThunderboltOutlined />}
-                    loading={parsing}
-                    onClick={handleParse}
-                    block
-                  >
-                    {parsing ? "正在识别..." : "识别"}
-                  </Button>
-                </div>
-
-                <Divider type="vertical" style={{ height: "auto", margin: 0 }} />
-
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    maxHeight: 460,
-                  }}
-                >
+              <Spin spinning={parsing} tip="正在识别，请稍候..." size="large">
+                <div style={{ display: "flex", gap: 16, minHeight: 400 }}>
                   <div
                     style={{
+                      flex: "0 0 340px",
                       display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: 10,
+                      flexDirection: "column",
+                      gap: 12,
                     }}
                   >
-                    <Typography.Text strong>识别结果</Typography.Text>
-                    {batchMeta && (
-                      <Tag color={batchMeta.source === "ai" ? "blue" : "default"}>
-                        {batchMeta.source === "ai" ? "AI" : "规则"}
-                        {confirmItems.length > 0 ? ` · ${confirmItems.length} 条` : ""}
-                      </Tag>
-                    )}
+                    <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                      支持多条描述，用分号或「还有」分隔
+                    </Typography.Text>
+                    <Input.TextArea
+                      value={nlText}
+                      onChange={(e) => setNlText(e.target.value)}
+                      placeholder="例如：微信买了报纸；支付宝花了三块钱面包"
+                      autoSize={{ minRows: 10, maxRows: 14 }}
+                      disabled={parsing}
+                      autoFocus
+                    />
+                    <Button
+                      type="primary"
+                      icon={parsing ? <LoadingOutlined spin /> : <ThunderboltOutlined />}
+                      loading={parsing}
+                      disabled={parsing}
+                      onClick={handleParse}
+                      block
+                    >
+                      {parsing ? "正在识别..." : "识别"}
+                    </Button>
                   </div>
 
-                  <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
-                    {parsing ? (
-                      <div
-                        style={{
-                          height: "100%",
-                          minHeight: 280,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Spin tip="正在识别，请稍候..." size="large" />
-                      </div>
-                    ) : confirmItems.length === 0 ? (
-                      <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description="识别结果将显示在这里"
-                        style={{ marginTop: 80 }}
-                      />
-                    ) : (
-                      <Space direction="vertical" style={{ width: "100%" }} size={10}>
-                        {confirmItems.map((item, index) => (
-                          <DraftItemEditor
-                            key={item.key}
-                            item={item}
-                            index={index}
-                            categories={categories}
-                            accounts={accounts}
-                            removable={confirmItems.length > 1}
-                            onChange={(patch) => updateConfirmItem(item.key, patch)}
-                            onRemove={() => removeConfirmItem(item.key)}
-                          />
-                        ))}
-                      </Space>
-                    )}
+                  <Divider type="vertical" style={{ height: "auto", margin: 0 }} />
+
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      maxHeight: 460,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: 10,
+                      }}
+                    >
+                      <Typography.Text strong>识别结果</Typography.Text>
+                      {parsing ? (
+                        <Tag icon={<LoadingOutlined spin />} color="processing">
+                          识别中
+                        </Tag>
+                      ) : (
+                        batchMeta && (
+                          <Tag color={batchMeta.source === "ai" ? "blue" : "default"}>
+                            {batchMeta.source === "ai" ? "AI" : "规则"}
+                            {confirmItems.length > 0 ? ` · ${confirmItems.length} 条` : ""}
+                          </Tag>
+                        )
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        flex: 1,
+                        overflowY: "auto",
+                        paddingRight: 4,
+                        minHeight: 280,
+                        borderRadius: 8,
+                        background: parsing ? "#fafafa" : undefined,
+                      }}
+                    >
+                      {parsing ? (
+                        <div style={{ padding: "16px 8px" }}>
+                          <Skeleton active paragraph={{ rows: 5 }} />
+                        </div>
+                      ) : confirmItems.length === 0 ? (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="识别结果将显示在这里"
+                          style={{ marginTop: 80 }}
+                        />
+                      ) : (
+                        <Space direction="vertical" style={{ width: "100%" }} size={10}>
+                          {confirmItems.map((item, index) => (
+                            <DraftItemEditor
+                              key={item.key}
+                              item={item}
+                              index={index}
+                              categories={categories}
+                              accounts={accounts}
+                              removable={confirmItems.length > 1}
+                              onChange={(patch) => updateConfirmItem(item.key, patch)}
+                              onRemove={() => removeConfirmItem(item.key)}
+                            />
+                          ))}
+                        </Space>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Spin>
             ),
           },
           {

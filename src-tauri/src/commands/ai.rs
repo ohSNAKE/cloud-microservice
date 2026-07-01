@@ -36,33 +36,42 @@ fn load_ai_config(conn: &rusqlite::Connection) -> AiConfig {
 }
 
 #[tauri::command]
-pub fn parse_transaction_nl_command(
-    state: State<AppState>,
+pub async fn parse_transaction_nl_command(
+    state: State<'_, AppState>,
     text: String,
 ) -> Result<ParsedTransactionBatch, String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let (categories, accounts, config) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
 
-    let categories = {
-        let mut stmt = conn
-            .prepare("SELECT id, name, type, icon FROM categories ORDER BY id")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map([], map_category)
-            .map_err(|e| e.to_string())?;
-        rows.filter_map(Result::ok).collect::<Vec<_>>()
+        let categories = {
+            let mut stmt = conn
+                .prepare("SELECT id, name, type, icon FROM categories ORDER BY id")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], map_category)
+                .map_err(|e| e.to_string())?;
+            rows.filter_map(Result::ok).collect::<Vec<_>>()
+        };
+
+        let accounts = {
+            let mut stmt = conn
+                .prepare("SELECT id, name, type, balance, created_at FROM accounts ORDER BY id")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], map_account)
+                .map_err(|e| e.to_string())?;
+            rows.filter_map(Result::ok).collect::<Vec<_>>()
+        };
+
+        let config = load_ai_config(&conn);
+        (categories, accounts, config)
     };
 
-    let accounts = {
-        let mut stmt = conn
-            .prepare("SELECT id, name, type, balance, created_at FROM accounts ORDER BY id")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map([], map_account)
-            .map_err(|e| e.to_string())?;
-        rows.filter_map(Result::ok).collect::<Vec<_>>()
-    };
+    let input = text.trim().to_string();
 
-    let config = load_ai_config(&conn);
-
-    parse_transactions_nl(text.trim(), &categories, &accounts, &config)
+    tauri::async_runtime::spawn_blocking(move || {
+        parse_transactions_nl(&input, &categories, &accounts, &config)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
