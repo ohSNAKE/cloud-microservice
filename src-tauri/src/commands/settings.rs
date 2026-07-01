@@ -18,6 +18,13 @@ pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
             .map(|v| v == "true")
             .unwrap_or(true),
         currency: get_setting(&conn, "currency").unwrap_or_else(|| "CNY".to_string()),
+        ai_enabled: get_setting(&conn, "ai_enabled")
+            .map(|v| v == "true")
+            .unwrap_or(false),
+        ai_api_key: get_setting(&conn, "ai_api_key").unwrap_or_default(),
+        ai_api_base: get_setting(&conn, "ai_api_base")
+            .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+        ai_model: get_setting(&conn, "ai_model").unwrap_or_else(|| "gpt-4o-mini".to_string()),
     })
 }
 
@@ -38,6 +45,10 @@ pub fn update_settings(state: State<AppState>, settings: Settings) -> Result<Set
             settings.refresh_on_startup.to_string(),
         ),
         ("currency", settings.currency.clone()),
+        ("ai_enabled", settings.ai_enabled.to_string()),
+        ("ai_api_key", settings.ai_api_key.clone()),
+        ("ai_api_base", settings.ai_api_base.clone()),
+        ("ai_model", settings.ai_model.clone()),
     ];
 
     for (key, value) in entries {

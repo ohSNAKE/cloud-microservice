@@ -171,6 +171,44 @@ pub struct Settings {
     pub quote_update_enabled: bool,
     pub refresh_on_startup: bool,
     pub currency: String,
+    pub ai_enabled: bool,
+    pub ai_api_key: String,
+    pub ai_api_base: String,
+    pub ai_model: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AiConfig {
+    pub ai_enabled: bool,
+    pub ai_api_key: String,
+    pub ai_api_base: String,
+    pub ai_model: String,
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            ai_enabled: false,
+            ai_api_key: String::new(),
+            ai_api_base: "https://api.openai.com/v1".to_string(),
+            ai_model: "gpt-4o-mini".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ParsedTransactionDraft {
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub category_name: Option<String>,
+    pub account_id: Option<i64>,
+    pub account_name: Option<String>,
+    pub transaction_date: String,
+    pub note: String,
+    pub confidence: f64,
+    pub source: String,
+    pub raw_text: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

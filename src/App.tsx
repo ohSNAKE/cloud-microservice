@@ -79,7 +79,7 @@ function AppLayout() {
           }}
         >
           <Typography.Text type="secondary">
-            管理资产 · 追踪支出 · 按 ⌘N 快速记账
+            管理资产 · 追踪支出 · 按 ⌘N 智能记账
           </Typography.Text>
         </Header>
         <Content style={{ padding: 24 }} key={refreshKey}>

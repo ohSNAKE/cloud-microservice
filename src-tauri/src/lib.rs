@@ -93,6 +93,7 @@ pub fn run() {
             commands::get_db_path,
             commands::export_data,
             commands::import_data,
+            commands::parse_transaction_nl_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

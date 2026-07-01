@@ -203,6 +203,10 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
             ("quote_update_enabled", "true"),
             ("refresh_on_startup", "true"),
             ("currency", "CNY"),
+            ("ai_enabled", "false"),
+            ("ai_api_key", ""),
+            ("ai_api_base", "https://api.openai.com/v1"),
+            ("ai_model", "gpt-4o-mini"),
         ] {
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?1, ?2)",
@@ -213,6 +217,18 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.execute(
             "INSERT OR IGNORE INTO settings (key, value) VALUES ('refresh_on_startup', 'true')",
             [],
+        )?;
+    }
+
+    for (key, value) in [
+        ("ai_enabled", "false"),
+        ("ai_api_key", ""),
+        ("ai_api_base", "https://api.openai.com/v1"),
+        ("ai_model", "gpt-4o-mini"),
+    ] {
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
+            params![key, value],
         )?;
     }
 

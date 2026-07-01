@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod ai;
 pub mod budgets;
 pub mod categories;
 pub mod data;
@@ -9,6 +10,7 @@ pub mod settings;
 pub mod transactions;
 
 pub use accounts::*;
+pub use ai::*;
 pub use budgets::*;
 pub use categories::*;
 pub use data::*;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Form, InputNumber, Switch, Typography, Upload, message } from "antd";
+import { Button, Card, Form, Input, InputNumber, Switch, Typography, Upload, message } from "antd";
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { api } from "../api";
 import type { Settings } from "../types";
@@ -9,6 +9,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [dbPath, setDbPath] = useState("");
+  const aiEnabled = Form.useWatch("ai_enabled", form);
 
   useEffect(() => {
     (async () => {
@@ -66,11 +67,30 @@ export default function SettingsPage() {
     <div>
       <div className="page-header">
         <h2>设置</h2>
-        <p>行情同步、数据备份与应用配置</p>
+        <p>行情同步、智能记账、数据备份与应用配置</p>
       </div>
 
-      <Card title="行情设置" style={{ maxWidth: 560, marginBottom: 16 }}>
-        <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical">
+        <Card title="智能记账" style={{ maxWidth: 560, marginBottom: 16 }}>
+          <Form.Item name="ai_enabled" label="启用 AI 识别" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="ai_api_key"
+            label="API Key"
+            extra="支持 OpenAI 及兼容接口（DeepSeek、通义等）。留空则仅使用本地规则识别。"
+          >
+            <Input.Password placeholder="sk-..." disabled={!aiEnabled} />
+          </Form.Item>
+          <Form.Item name="ai_api_base" label="API 地址">
+            <Input placeholder="https://api.openai.com/v1" disabled={!aiEnabled} />
+          </Form.Item>
+          <Form.Item name="ai_model" label="模型">
+            <Input placeholder="gpt-4o-mini" disabled={!aiEnabled} />
+          </Form.Item>
+        </Card>
+
+        <Card title="行情设置" style={{ maxWidth: 560, marginBottom: 16 }}>
           <Form.Item name="quote_update_enabled" label="自动更新行情" valuePropName="checked">
             <Switch />
           </Form.Item>
@@ -81,9 +101,12 @@ export default function SettingsPage() {
             <InputNumber min={5} max={240} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item label="上次同步">{lastSyncAt ?? "尚未同步"}</Form.Item>
-        </Form>
-        <Button type="primary" loading={loading} onClick={handleSave}>保存设置</Button>
-      </Card>
+        </Card>
+      </Form>
+
+      <Button type="primary" loading={loading} onClick={handleSave} style={{ marginBottom: 16 }}>
+        保存设置
+      </Button>
 
       <Card title="数据管理" style={{ maxWidth: 560, marginBottom: 16 }}>
         <Typography.Paragraph type="secondary" copyable={dbPath ? { text: dbPath } : undefined}>

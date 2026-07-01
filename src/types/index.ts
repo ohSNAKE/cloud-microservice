@@ -146,6 +146,24 @@ export interface Settings {
   quote_update_enabled: boolean;
   refresh_on_startup: boolean;
   currency: string;
+  ai_enabled: boolean;
+  ai_api_key: string;
+  ai_api_base: string;
+  ai_model: string;
+}
+
+export interface ParsedTransactionDraft {
+  type: "income" | "expense";
+  amount: number;
+  category_id: number | null;
+  category_name: string | null;
+  account_id: number | null;
+  account_name: string | null;
+  transaction_date: string;
+  note: string;
+  confidence: number;
+  source: "ai" | "rule";
+  raw_text: string;
 }
 
 export interface QuoteRefreshResult {
