@@ -7,3 +7,4 @@ release/
 *.db
 *.log
 .env
+scripts/setup-ai-config.local.sql

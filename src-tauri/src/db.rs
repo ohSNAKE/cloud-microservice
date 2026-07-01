@@ -151,6 +151,13 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
         ",
     )?;
 
+    conn.execute(
+        "UPDATE settings SET value = 'https://v2.pincc.ai/v1'
+         WHERE key = 'ai_api_base' AND value = 'https://api.openai.com/v1'",
+        [],
+    )
+    .ok();
+
     Ok(())
 }
 
@@ -203,9 +210,9 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
             ("quote_update_enabled", "true"),
             ("refresh_on_startup", "true"),
             ("currency", "CNY"),
-            ("ai_enabled", "false"),
+            ("ai_enabled", "true"),
             ("ai_api_key", ""),
-            ("ai_api_base", "https://api.openai.com/v1"),
+            ("ai_api_base", "https://v2.pincc.ai/v1"),
             ("ai_model", "gpt-4o-mini"),
         ] {
             conn.execute(
@@ -221,9 +228,9 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     for (key, value) in [
-        ("ai_enabled", "false"),
+        ("ai_enabled", "true"),
         ("ai_api_key", ""),
-        ("ai_api_base", "https://api.openai.com/v1"),
+        ("ai_api_base", "https://v2.pincc.ai/v1"),
         ("ai_model", "gpt-4o-mini"),
     ] {
         conn.execute(

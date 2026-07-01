@@ -188,9 +188,9 @@ pub struct AiConfig {
 impl Default for AiConfig {
     fn default() -> Self {
         Self {
-            ai_enabled: false,
+            ai_enabled: true,
             ai_api_key: String::new(),
-            ai_api_base: "https://api.openai.com/v1".to_string(),
+            ai_api_base: "https://v2.pincc.ai/v1".to_string(),
             ai_model: "gpt-4o-mini".to_string(),
         }
     }

@@ -78,12 +78,12 @@ export default function SettingsPage() {
           <Form.Item
             name="ai_api_key"
             label="API Key"
-            extra="支持 OpenAI 及兼容接口（DeepSeek、通义等）。留空则仅使用本地规则识别。"
+            extra="支持 OpenAI 兼容接口（默认 PinCC）。Key 仅存本地数据库，不会上传。"
           >
             <Input.Password placeholder="sk-..." disabled={!aiEnabled} />
           </Form.Item>
           <Form.Item name="ai_api_base" label="API 地址">
-            <Input placeholder="https://api.openai.com/v1" disabled={!aiEnabled} />
+            <Input placeholder="https://v2.pincc.ai/v1" disabled={!aiEnabled} />
           </Form.Item>
           <Form.Item name="ai_model" label="模型">
             <Input placeholder="gpt-4o-mini" disabled={!aiEnabled} />

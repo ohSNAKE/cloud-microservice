@@ -23,7 +23,7 @@ pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
             .unwrap_or(false),
         ai_api_key: get_setting(&conn, "ai_api_key").unwrap_or_default(),
         ai_api_base: get_setting(&conn, "ai_api_base")
-            .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+            .unwrap_or_else(|| "https://v2.pincc.ai/v1".to_string()),
         ai_model: get_setting(&conn, "ai_model").unwrap_or_else(|| "gpt-4o-mini".to_string()),
     })
 }
