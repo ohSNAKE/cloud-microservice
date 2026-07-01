@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Button,
-  Card,
   DatePicker,
+  Divider,
+  Empty,
   Form,
   Input,
   InputNumber,
   Modal,
+  Row,
+  Col,
   Select,
   Space,
+  Spin,
   Tabs,
   Tag,
   Typography,
@@ -30,6 +33,133 @@ interface ConfirmItem extends ParsedTransactionDraft {
   key: string;
 }
 
+function DraftItemEditor({
+  item,
+  index,
+  categories,
+  accounts,
+  removable,
+  onChange,
+  onRemove,
+}: {
+  item: ConfirmItem;
+  index: number;
+  categories: Category[];
+  accounts: Account[];
+  removable: boolean;
+  onChange: (patch: Partial<ConfirmItem>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: "#fafafa",
+        border: "1px solid #f0f0f0",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+          gap: 8,
+        }}
+      >
+        <Typography.Text strong style={{ fontSize: 13 }}>
+          #{index + 1}
+        </Typography.Text>
+        <Typography.Text
+          type="secondary"
+          ellipsis
+          style={{ flex: 1, fontSize: 12 }}
+          title={item.raw_text}
+        >
+          {item.raw_text}
+        </Typography.Text>
+        {removable && (
+          <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={onRemove} />
+        )}
+      </div>
+
+      {item.parse_notice && (
+        <Typography.Text type="warning" style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
+          {item.parse_notice}
+        </Typography.Text>
+      )}
+
+      <Row gutter={[8, 8]}>
+        <Col span={8}>
+          <Select
+            size="small"
+            value={item.type}
+            style={{ width: "100%" }}
+            onChange={(type) => onChange({ type, category_id: null, category_name: null })}
+            options={[
+              { label: "支出", value: "expense" },
+              { label: "收入", value: "income" },
+            ]}
+          />
+        </Col>
+        <Col span={8}>
+          <InputNumber
+            size="small"
+            min={0.01}
+            precision={2}
+            style={{ width: "100%" }}
+            prefix="¥"
+            placeholder="金额"
+            value={item.amount ?? undefined}
+            onChange={(amount) => onChange({ amount: amount ?? null })}
+          />
+        </Col>
+        <Col span={8}>
+          <DatePicker
+            size="small"
+            style={{ width: "100%" }}
+            value={dayjs(item.transaction_date)}
+            onChange={(d) =>
+              onChange({ transaction_date: d?.format("YYYY-MM-DD") ?? item.transaction_date })
+            }
+          />
+        </Col>
+        <Col span={12}>
+          <Select
+            size="small"
+            placeholder="分类"
+            style={{ width: "100%" }}
+            value={item.category_id ?? undefined}
+            onChange={(category_id) => onChange({ category_id })}
+            options={categories
+              .filter((c) => c.type === item.type)
+              .map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
+          />
+        </Col>
+        <Col span={12}>
+          <Select
+            size="small"
+            placeholder="账户"
+            style={{ width: "100%" }}
+            value={item.account_id ?? undefined}
+            onChange={(account_id) => onChange({ account_id })}
+            options={accounts.map((a) => ({ label: a.name, value: a.id }))}
+          />
+        </Col>
+        <Col span={24}>
+          <Input
+            size="small"
+            placeholder="备注"
+            value={item.note}
+            onChange={(e) => onChange({ note: e.target.value })}
+          />
+        </Col>
+      </Row>
+    </div>
+  );
+}
+
 export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModalProps) {
   const [form] = Form.useForm();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -39,7 +169,6 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
   const [parsing, setParsing] = useState(false);
   const [confirmItems, setConfirmItems] = useState<ConfirmItem[]>([]);
   const [batchMeta, setBatchMeta] = useState<{ raw_text: string; source: string } | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const txType = Form.useWatch("type", form) ?? "expense";
 
@@ -83,6 +212,8 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
       return;
     }
     setParsing(true);
+    setConfirmItems([]);
+    setBatchMeta(null);
     try {
       const result = await api.parseTransactionNl(text);
       if (result.parse_notice) {
@@ -95,7 +226,6 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
           key: `${Date.now()}-${index}`,
         })),
       );
-      setConfirmOpen(true);
     } catch (e) {
       const msg = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
       message.error(msg || "识别失败，请检查输入或稍后重试");
@@ -114,7 +244,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
 
   const handleConfirmSave = async () => {
     if (confirmItems.length === 0) {
-      message.warning("没有可保存的记录");
+      message.warning("请先识别记账内容");
       return;
     }
 
@@ -146,7 +276,6 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
         });
       }
       message.success(`已成功入库 ${confirmItems.length} 条记录`);
-      setConfirmOpen(false);
       onClose();
       onSuccess?.();
     } catch (e) {
@@ -156,48 +285,62 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
     }
   };
 
+  const smartFooter =
+    activeTab === "smart" ? (
+      <Space>
+        <Button onClick={onClose}>取消</Button>
+        <Button
+          type="primary"
+          loading={saving}
+          disabled={confirmItems.length === 0}
+          onClick={handleConfirmSave}
+        >
+          {confirmItems.length > 0 ? `确认入库 ${confirmItems.length} 条` : "确认入库"}
+        </Button>
+      </Space>
+    ) : undefined;
+
   return (
-    <>
-      <Modal
-        title="快速记账 (⌘N)"
-        open={open}
-        onCancel={onClose}
-        onOk={activeTab === "form" ? handleFormOk : undefined}
-        okText={activeTab === "form" ? "保存" : undefined}
-        footer={activeTab === "form" ? undefined : null}
-        destroyOnClose
-        width={480}
-      >
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: "smart",
-              label: (
-                <span>
-                  <RobotOutlined /> 智能记账
-                </span>
-              ),
-              children: (
-                <Space direction="vertical" style={{ width: "100%" }} size="middle">
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="支持单条或多条描述"
-                    description="例如：「微信买了报纸；支付宝花了三块钱面包」会识别为多条记录。"
-                  />
+    <Modal
+      title="快速记账 (⌘N)"
+      open={open}
+      onCancel={onClose}
+      onOk={activeTab === "form" ? handleFormOk : undefined}
+      okText={activeTab === "form" ? "保存" : undefined}
+      footer={activeTab === "smart" ? smartFooter : activeTab === "form" ? undefined : null}
+      destroyOnClose
+      width={activeTab === "smart" ? 920 : 480}
+    >
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            key: "smart",
+            label: (
+              <span>
+                <RobotOutlined /> 智能记账
+              </span>
+            ),
+            children: (
+              <div style={{ display: "flex", gap: 16, minHeight: 400 }}>
+                <div
+                  style={{
+                    flex: "0 0 340px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                    支持多条描述，用分号或「还有」分隔
+                  </Typography.Text>
                   <Input.TextArea
                     value={nlText}
                     onChange={(e) => setNlText(e.target.value)}
-                    placeholder="输入一条或多条记账内容..."
-                    autoSize={{ minRows: 3, maxRows: 8 }}
-                    onPressEnter={(e) => {
-                      if (!e.shiftKey) {
-                        e.preventDefault();
-                        handleParse();
-                      }
-                    }}
+                    placeholder="例如：微信买了报纸；支付宝花了三块钱面包"
+                    autoSize={{ minRows: 10, maxRows: 14 }}
+                    disabled={parsing}
                     autoFocus
                   />
                   <Button
@@ -207,148 +350,115 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
                     onClick={handleParse}
                     block
                   >
-                    识别并确认
+                    {parsing ? "正在识别..." : "识别"}
                   </Button>
-                </Space>
-              ),
-            },
-            {
-              key: "form",
-              label: "表单记账",
-              children: (
-                <Form form={form} layout="vertical">
-                  <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-                    <Select
-                      options={[
-                        { label: "支出", value: "expense" },
-                        { label: "收入", value: "income" },
-                      ]}
-                    />
-                  </Form.Item>
-                  <Form.Item name="amount" label="金额" rules={[{ required: true }]}>
-                    <InputNumber min={0.01} precision={2} style={{ width: "100%" }} prefix="¥" />
-                  </Form.Item>
-                  <Form.Item name="category_id" label="分类" rules={[{ required: true }]}>
-                    <Select
-                      options={categories
-                        .filter((c) => c.type === txType)
-                        .map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
-                    />
-                  </Form.Item>
-                  <Form.Item name="account_id" label="账户" rules={[{ required: true }]}>
-                    <Select options={accounts.map((a) => ({ label: a.name, value: a.id }))} />
-                  </Form.Item>
-                  <Form.Item name="transaction_date" label="日期" rules={[{ required: true }]}>
-                    <DatePicker style={{ width: "100%" }} />
-                  </Form.Item>
-                  <Form.Item name="note" label="备注">
-                    <Input placeholder="可选" />
-                  </Form.Item>
-                </Form>
-              ),
-            },
-          ]}
-        />
-      </Modal>
+                </div>
 
-      <Modal
-        title={`确认记账（${confirmItems.length} 条）`}
-        open={confirmOpen}
-        onCancel={() => setConfirmOpen(false)}
-        onOk={handleConfirmSave}
-        okText={`确认入库 ${confirmItems.length} 条`}
-        confirmLoading={saving}
-        width={560}
-        zIndex={1100}
-      >
-        {batchMeta && (
-          <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>
-            <Typography.Text type="secondary">原文：{batchMeta.raw_text}</Typography.Text>
-            <Tag color={batchMeta.source === "ai" ? "blue" : "default"}>
-              {batchMeta.source === "ai" ? "AI 识别" : "规则识别"}
-            </Tag>
-          </Space>
-        )}
+                <Divider type="vertical" style={{ height: "auto", margin: 0 }} />
 
-        <Space direction="vertical" style={{ width: "100%" }} size="middle">
-          {confirmItems.map((item, index) => (
-            <Card
-              key={item.key}
-              size="small"
-              title={`第 ${index + 1} 条`}
-              extra={
-                confirmItems.length > 1 ? (
-                  <Button
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeConfirmItem(item.key)}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    maxHeight: 460,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 10,
+                    }}
+                  >
+                    <Typography.Text strong>识别结果</Typography.Text>
+                    {batchMeta && (
+                      <Tag color={batchMeta.source === "ai" ? "blue" : "default"}>
+                        {batchMeta.source === "ai" ? "AI" : "规则"}
+                        {confirmItems.length > 0 ? ` · ${confirmItems.length} 条` : ""}
+                      </Tag>
+                    )}
+                  </div>
+
+                  <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
+                    {parsing ? (
+                      <div
+                        style={{
+                          height: "100%",
+                          minHeight: 280,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Spin tip="正在识别，请稍候..." size="large" />
+                      </div>
+                    ) : confirmItems.length === 0 ? (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="识别结果将显示在这里"
+                        style={{ marginTop: 80 }}
+                      />
+                    ) : (
+                      <Space direction="vertical" style={{ width: "100%" }} size={10}>
+                        {confirmItems.map((item, index) => (
+                          <DraftItemEditor
+                            key={item.key}
+                            item={item}
+                            index={index}
+                            categories={categories}
+                            accounts={accounts}
+                            removable={confirmItems.length > 1}
+                            onChange={(patch) => updateConfirmItem(item.key, patch)}
+                            onRemove={() => removeConfirmItem(item.key)}
+                          />
+                        ))}
+                      </Space>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ),
+          },
+          {
+            key: "form",
+            label: "表单记账",
+            children: (
+              <Form form={form} layout="vertical">
+                <Form.Item name="type" label="类型" rules={[{ required: true }]}>
+                  <Select
+                    options={[
+                      { label: "支出", value: "expense" },
+                      { label: "收入", value: "income" },
+                    ]}
                   />
-                ) : null
-              }
-            >
-              <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-                {item.raw_text}
-              </Typography.Text>
-              {item.parse_notice && (
-                <Alert type="warning" message={item.parse_notice} showIcon style={{ marginBottom: 8 }} />
-              )}
-              <Space direction="vertical" style={{ width: "100%" }}>
-                <Select
-                  value={item.type}
-                  style={{ width: "100%" }}
-                  onChange={(type) =>
-                    updateConfirmItem(item.key, { type, category_id: null, category_name: null })
-                  }
-                  options={[
-                    { label: "支出", value: "expense" },
-                    { label: "收入", value: "income" },
-                  ]}
-                />
-                <InputNumber
-                  min={0.01}
-                  precision={2}
-                  style={{ width: "100%" }}
-                  prefix="¥"
-                  placeholder="金额"
-                  value={item.amount ?? undefined}
-                  onChange={(amount) => updateConfirmItem(item.key, { amount: amount ?? null })}
-                />
-                <Select
-                  placeholder="分类"
-                  style={{ width: "100%" }}
-                  value={item.category_id ?? undefined}
-                  onChange={(category_id) => updateConfirmItem(item.key, { category_id })}
-                  options={categories
-                    .filter((c) => c.type === item.type)
-                    .map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
-                />
-                <Select
-                  placeholder="账户"
-                  style={{ width: "100%" }}
-                  value={item.account_id ?? undefined}
-                  onChange={(account_id) => updateConfirmItem(item.key, { account_id })}
-                  options={accounts.map((a) => ({ label: a.name, value: a.id }))}
-                />
-                <DatePicker
-                  style={{ width: "100%" }}
-                  value={dayjs(item.transaction_date)}
-                  onChange={(d) =>
-                    updateConfirmItem(item.key, {
-                      transaction_date: d?.format("YYYY-MM-DD") ?? item.transaction_date,
-                    })
-                  }
-                />
-                <Input
-                  placeholder="备注"
-                  value={item.note}
-                  onChange={(e) => updateConfirmItem(item.key, { note: e.target.value })}
-                />
-              </Space>
-            </Card>
-          ))}
-        </Space>
-      </Modal>
-    </>
+                </Form.Item>
+                <Form.Item name="amount" label="金额" rules={[{ required: true }]}>
+                  <InputNumber min={0.01} precision={2} style={{ width: "100%" }} prefix="¥" />
+                </Form.Item>
+                <Form.Item name="category_id" label="分类" rules={[{ required: true }]}>
+                  <Select
+                    options={categories
+                      .filter((c) => c.type === txType)
+                      .map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
+                  />
+                </Form.Item>
+                <Form.Item name="account_id" label="账户" rules={[{ required: true }]}>
+                  <Select options={accounts.map((a) => ({ label: a.name, value: a.id }))} />
+                </Form.Item>
+                <Form.Item name="transaction_date" label="日期" rules={[{ required: true }]}>
+                  <DatePicker style={{ width: "100%" }} />
+                </Form.Item>
+                <Form.Item name="note" label="备注">
+                  <Input placeholder="可选" />
+                </Form.Item>
+              </Form>
+            ),
+          },
+        ]}
+      />
+    </Modal>
   );
 }
