@@ -13,13 +13,15 @@ import { api, formatMoney } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
-import { CHART_COLORS, chartGrid } from "../constants/chartTheme";
+import { chartGrid } from "../constants/chartTheme";
 import { useQuickAdd } from "../context/QuickAddContext";
+import { useTheme } from "../context/ThemeContext";
 import type { BudgetAlert, DashboardSummary, MonthlyStat } from "../types";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { openQuickAdd } = useQuickAdd();
+  const { chartColors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
@@ -61,23 +63,23 @@ export default function DashboardPage() {
           name: "收入",
           type: "bar",
           data: monthlyStats.map((item) => item.income),
-          itemStyle: { color: CHART_COLORS.income, borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: chartColors.income, borderRadius: [4, 4, 0, 0] },
         },
         {
           name: "支出",
           type: "bar",
           data: monthlyStats.map((item) => item.expense),
-          itemStyle: { color: CHART_COLORS.expense, borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: chartColors.expense, borderRadius: [4, 4, 0, 0] },
         },
       ],
     };
-  }, [monthlyStats]);
+  }, [monthlyStats, chartColors]);
 
   const assetOption = useMemo(() => {
     if (!summary) return {};
     return {
       tooltip: { trigger: "item" },
-      color: [CHART_COLORS.primary, "#69b1ff"],
+      color: [chartColors.primary, "#69b1ff"],
       series: [
         {
           type: "pie",
@@ -89,7 +91,7 @@ export default function DashboardPage() {
         },
       ],
     };
-  }, [summary]);
+  }, [summary, chartColors]);
 
   if (loading || !summary) {
     return <PageLoader tip="加载财务数据..." />;
@@ -197,13 +199,13 @@ export default function DashboardPage() {
             title="本月收支"
             extra={<Button type="link" onClick={() => navigate("/transactions")}>明细</Button>}
           >
-            <Statistic title="收入" value={summary.month_income} precision={2} prefix="¥" valueStyle={{ color: CHART_COLORS.income }} />
+            <Statistic title="收入" value={summary.month_income} precision={2} prefix="¥" valueStyle={{ color: chartColors.income }} />
             <Statistic
               title="支出"
               value={summary.month_expense}
               precision={2}
               prefix="¥"
-              valueStyle={{ color: CHART_COLORS.expense }}
+              valueStyle={{ color: chartColors.expense }}
               style={{ marginTop: 16 }}
             />
             <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>

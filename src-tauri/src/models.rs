@@ -180,6 +180,8 @@ pub struct Settings {
     pub ai_api_base: String,
     #[serde(default = "default_ai_model")]
     pub ai_model: String,
+    #[serde(default = "default_theme_mode")]
+    pub theme_mode: String,
 }
 
 fn default_currency() -> String {
@@ -192,6 +194,10 @@ fn default_ai_api_base() -> String {
 
 fn default_ai_model() -> String {
     "gpt-4o-mini".to_string()
+}
+
+fn default_theme_mode() -> String {
+    "system".to_string()
 }
 
 #[derive(Debug, Clone)]

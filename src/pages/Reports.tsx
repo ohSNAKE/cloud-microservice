@@ -20,10 +20,12 @@ import { api, formatMoney } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
-import { CHART_COLORS, chartGrid } from "../constants/chartTheme";
+import { chartGrid } from "../constants/chartTheme";
+import { useTheme } from "../context/ThemeContext";
 import type { Budget, Category, CategoryStat, MonthlyStat, PortfolioHistoryPoint } from "../types";
 
 export default function ReportsPage() {
+  const { chartColors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(dayjs().format("YYYY-MM"));
   const [expenseStats, setExpenseStats] = useState<CategoryStat[]>([]);
@@ -63,7 +65,7 @@ export default function ReportsPage() {
   const expenseChartOption = useMemo(
     () => ({
       tooltip: { trigger: "item" },
-      color: [CHART_COLORS.expense, "#ff7875", "#ffa39e", "#ffccc7", "#ffd666", "#ffc53d"],
+      color: chartColors.expensePalette,
       series: [
         {
           type: "pie",
@@ -75,7 +77,7 @@ export default function ReportsPage() {
         },
       ],
     }),
-    [expenseStats],
+    [expenseStats, chartColors],
   );
 
   const trendOption = useMemo(
@@ -91,18 +93,18 @@ export default function ReportsPage() {
           type: "line",
           data: monthlyStats.map((m) => m.income),
           smooth: true,
-          itemStyle: { color: CHART_COLORS.income },
+          itemStyle: { color: chartColors.income },
         },
         {
           name: "支出",
           type: "line",
           data: monthlyStats.map((m) => m.expense),
           smooth: true,
-          itemStyle: { color: CHART_COLORS.expense },
+          itemStyle: { color: chartColors.expense },
         },
       ],
     }),
-    [monthlyStats],
+    [monthlyStats, chartColors],
   );
 
   const portfolioOption = useMemo(
@@ -117,12 +119,12 @@ export default function ReportsPage() {
           type: "line",
           data: portfolioHistory.map((p) => p.total_value),
           smooth: true,
-          areaStyle: { color: CHART_COLORS.primaryArea },
-          lineStyle: { color: CHART_COLORS.primary },
+          areaStyle: { color: chartColors.primaryArea },
+          lineStyle: { color: chartColors.primary },
         },
       ],
     }),
-    [portfolioHistory],
+    [portfolioHistory, chartColors],
   );
 
   const handleSetBudget = async () => {

@@ -16,7 +16,9 @@ import HoldingsPage from "./pages/Holdings";
 import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
+import ThemeSwitcher from "./components/theme/ThemeSwitcher";
 import { QuickAddProvider } from "./context/QuickAddContext";
+import { useTheme } from "./context/ThemeContext";
 
 const { Header, Sider, Content } = Layout;
 
@@ -44,6 +46,7 @@ function shortcutLabel() {
 function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { resolved } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -75,7 +78,7 @@ function AppLayout() {
           collapsible
           collapsed={collapsed}
           onCollapse={setCollapsed}
-          theme="light"
+          theme={resolved === "dark" ? "dark" : "light"}
           width={228}
           collapsedWidth={64}
         >
@@ -98,7 +101,8 @@ function AppLayout() {
                 {meta.subtitle}
               </Typography.Paragraph>
             </div>
-            <Space>
+            <Space wrap>
+              <ThemeSwitcher size="small" />
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {shortcutLabel()} 智能记账
               </Typography.Text>

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Radio, Spin } from "antd";
 import ReactECharts from "echarts-for-react";
 import { api } from "../api";
+import type { ChartColors } from "../constants/chartTheme";
+import { useTheme } from "../context/ThemeContext";
 import type { Holding, KlineBar, KlinePeriod } from "../types";
 
 interface KlineChartProps {
@@ -14,12 +16,12 @@ function formatVolume(value: number) {
   return value.toFixed(0);
 }
 
-function buildCandlestickOption(bars: KlineBar[], costPrice: number) {
+function buildCandlestickOption(bars: KlineBar[], costPrice: number, colors: ChartColors) {
   const dates = bars.map((b) => b.date);
   const ohlc = bars.map((b) => [b.open, b.close, b.low, b.high]);
   const volumes = bars.map((b, i) => {
     const up = bars[i].close >= bars[i].open;
-    return { value: b.volume, itemStyle: { color: up ? "#ef5350" : "#26a69a" } };
+    return { value: b.volume, itemStyle: { color: up ? colors.candleUp : colors.candleDown } };
   });
 
   return {
@@ -67,10 +69,10 @@ function buildCandlestickOption(bars: KlineBar[], costPrice: number) {
         xAxisIndex: 0,
         yAxisIndex: 0,
         itemStyle: {
-          color: "#ef5350",
-          color0: "#26a69a",
-          borderColor: "#ef5350",
-          borderColor0: "#26a69a",
+          color: colors.candleUp,
+          color0: colors.candleDown,
+          borderColor: colors.candleUp,
+          borderColor0: colors.candleDown,
         },
         markLine: {
           symbol: "none",
@@ -90,7 +92,7 @@ function buildCandlestickOption(bars: KlineBar[], costPrice: number) {
   };
 }
 
-function buildLineOption(bars: KlineBar[], costPrice: number) {
+function buildLineOption(bars: KlineBar[], costPrice: number, colors: ChartColors) {
   const dates = bars.map((b) => b.date);
   const values = bars.map((b) => b.close);
 
@@ -118,8 +120,8 @@ function buildLineOption(bars: KlineBar[], costPrice: number) {
         data: values,
         smooth: true,
         showSymbol: false,
-        lineStyle: { width: 2, color: "#1677ff" },
-        areaStyle: { color: "rgba(22, 119, 255, 0.12)" },
+        lineStyle: { width: 2, color: colors.primary },
+        areaStyle: { color: colors.primaryArea },
         markLine: {
           symbol: "none",
           lineStyle: { type: "dashed", color: "#faad14" },
@@ -132,6 +134,7 @@ function buildLineOption(bars: KlineBar[], costPrice: number) {
 }
 
 export default function KlineChart({ holding }: KlineChartProps) {
+  const { chartColors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<KlinePeriod>("day");
   const [bars, setBars] = useState<KlineBar[]>([]);
@@ -164,9 +167,9 @@ export default function KlineChart({ holding }: KlineChartProps) {
   const option = useMemo(() => {
     if (bars.length === 0) return {};
     return chartType === "candlestick"
-      ? buildCandlestickOption(bars, holding.cost_price)
-      : buildLineOption(bars, holding.cost_price);
-  }, [bars, chartType, holding.cost_price]);
+      ? buildCandlestickOption(bars, holding.cost_price, chartColors)
+      : buildLineOption(bars, holding.cost_price, chartColors);
+  }, [bars, chartType, holding.cost_price, chartColors]);
 
   if (loading) {
     return (
@@ -177,7 +180,7 @@ export default function KlineChart({ holding }: KlineChartProps) {
   }
 
   if (bars.length === 0) {
-    return <div style={{ textAlign: "center", padding: 80, color: "#999" }}>暂无行情数据</div>;
+    return <div style={{ textAlign: "center", padding: 80, color: chartColors.textMuted }}>暂无行情数据</div>;
   }
 
   return (
@@ -197,7 +200,7 @@ export default function KlineChart({ holding }: KlineChartProps) {
         />
       )}
       {holding.type === "fund" && (
-        <div style={{ marginBottom: 12, color: "#667085" }}>基金展示净值走势（日频）</div>
+        <div style={{ marginBottom: 12, color: chartColors.textSecondary }}>基金展示净值走势（日频）</div>
       )}
       <ReactECharts option={option} style={{ height: 460 }} notMerge />
     </div>

@@ -29,10 +29,11 @@ import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
 import KlineChart from "../components/KlineChart";
-import { CHART_COLORS } from "../constants/chartTheme";
+import { useTheme } from "../context/ThemeContext";
 import type { Holding } from "../types";
 
 export default function HoldingsPage() {
+  const { chartColors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -105,7 +106,7 @@ export default function HoldingsPage() {
   const allocationOption = useMemo(
     () => ({
       tooltip: { trigger: "item" },
-      color: [CHART_COLORS.primary, "#69b1ff", "#95de64", "#ffc53d", "#b37feb"],
+      color: chartColors.palette,
       series: [
         {
           type: "pie",
@@ -114,7 +115,7 @@ export default function HoldingsPage() {
         },
       ],
     }),
-    [holdings],
+    [holdings, chartColors],
   );
 
   if (loading) {

@@ -212,7 +212,7 @@ body,
 .draft-item {
   padding: 10px 12px;
   border-radius: var(--radius-md);
-  background: #fafbfc;
+  background: var(--color-muted-surface);
   border: 1px solid var(--color-border-light);
 }
 
@@ -266,7 +266,7 @@ body,
 }
 
 .quick-add-modal__result-scroll.is-loading {
-  background: #fafbfc;
+  background: var(--color-muted-surface);
 }
 
 .ant-layout-sider-trigger {
@@ -284,7 +284,7 @@ body,
 }
 
 .ant-table-wrapper .ant-table-thead > tr > th {
-  background: #fafbfc !important;
+  background: var(--color-muted-surface) !important;
 }
 
 .ant-tabs-nav {

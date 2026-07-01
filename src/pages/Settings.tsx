@@ -17,10 +17,13 @@ import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { api } from "../api";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
+import ThemeSwitcher from "../components/theme/ThemeSwitcher";
+import { useTheme } from "../context/ThemeContext";
 import type { Settings } from "../types";
 
 export default function SettingsPage() {
   const [form] = Form.useForm<Settings>();
+  const { mode: themeMode } = useTheme();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export default function SettingsPage() {
         api.getSettings(),
         Promise.resolve(form.getFieldsValue(true) as Partial<Settings>),
       ]);
-      const merged: Settings = { ...current, ...values };
+      const merged: Settings = { ...current, ...values, theme_mode: themeMode };
       await api.updateSettings(merged);
       form.setFieldsValue(merged);
       message.success("设置已保存");
@@ -120,6 +123,15 @@ export default function SettingsPage() {
         </Form.Item>
 
         <Row gutter={[16, 16]}>
+          <Col xs={24}>
+            <Card className="stat-card" title="外观">
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+                选择浅色、深色，或跟随系统外观自动切换
+              </Typography.Paragraph>
+              <ThemeSwitcher block />
+            </Card>
+          </Col>
+
           <Col xs={24} lg={12}>
             <Card className="stat-card" title="智能记账">
               <Form.Item name="ai_enabled" label="启用 AI 识别" valuePropName="checked">

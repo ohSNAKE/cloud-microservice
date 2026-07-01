@@ -141,6 +141,8 @@ export interface CategoryStat {
   percentage: number;
 }
 
+export type ThemeMode = "light" | "dark" | "system";
+
 export interface Settings {
   quote_update_interval: number;
   quote_update_enabled: boolean;
@@ -150,6 +152,7 @@ export interface Settings {
   ai_api_key: string;
   ai_api_base: string;
   ai_model: string;
+  theme_mode: ThemeMode;
 }
 
 export interface ParsedTransactionDraft {

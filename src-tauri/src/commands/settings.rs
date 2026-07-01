@@ -25,6 +25,7 @@ pub fn get_settings(state: State<AppState>) -> Result<Settings, String> {
         ai_api_base: get_setting(&conn, "ai_api_base")
             .unwrap_or_else(|| "https://v2.pincc.ai/v1".to_string()),
         ai_model: get_setting(&conn, "ai_model").unwrap_or_else(|| "gpt-4o-mini".to_string()),
+        theme_mode: get_setting(&conn, "theme_mode").unwrap_or_else(|| "system".to_string()),
     })
 }
 
@@ -49,6 +50,7 @@ pub fn update_settings(state: State<AppState>, settings: Settings) -> Result<Set
         ("ai_api_key", settings.ai_api_key.clone()),
         ("ai_api_base", settings.ai_api_base.clone()),
         ("ai_model", settings.ai_model.clone()),
+        ("theme_mode", settings.theme_mode.clone()),
     ];
 
     for (key, value) in entries {
