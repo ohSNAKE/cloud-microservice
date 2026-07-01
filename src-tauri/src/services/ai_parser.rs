@@ -44,10 +44,23 @@ pub fn parse_transaction_nl(
 
     let draft = if config.ai_enabled && !config.ai_api_key.trim().is_empty() {
         match parse_with_llm(trimmed, categories, accounts, config) {
-            Ok(draft) => draft,
+            Ok(mut draft) => {
+                draft.parse_notice = None;
+                draft
+            }
             Err(err) => {
                 eprintln!("AI 解析失败，使用规则兜底: {err}");
-                parse_with_rules(trimmed, categories, accounts)?
+                let mut draft = parse_with_rules(trimmed, categories, accounts)?;
+                let brief = if err.contains("503") {
+                    "503 服务暂时不可用".to_string()
+                } else if err.len() > 60 {
+                    format!("{}…", &err[..60])
+                } else {
+                    err.clone()
+                };
+                draft.parse_notice =
+                    Some(format!("AI 暂不可用（{brief}），已使用本地规则识别"));
+                draft
             }
         }
     } else {
@@ -101,7 +114,11 @@ fn parse_with_llm(
         ]
     });
 
-    let response = ureq::post(&url)
+    let response = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout_read(std::time::Duration::from_secs(20))
+        .build()
+        .post(&url)
         .set("Authorization", &format!("Bearer {}", config.ai_api_key.trim()))
         .set("Content-Type", "application/json")
         .send_json(body)
@@ -148,6 +165,7 @@ fn parse_with_llm(
         confidence: llm.confidence.unwrap_or(0.85).clamp(0.0, 1.0),
         source: "ai".to_string(),
         raw_text: text.to_string(),
+        parse_notice: None,
     })
 }
 
@@ -174,6 +192,7 @@ fn parse_with_rules(
         confidence: 0.55,
         source: "rule".to_string(),
         raw_text: text.to_string(),
+        parse_notice: None,
     })
 }
 
@@ -241,7 +260,7 @@ fn extract_amount(text: &str) -> Option<f64> {
     for keyword in keywords {
         if let Some(idx) = text.find(keyword) {
             let tail = &text[idx + keyword.len()..];
-            if let Some(amount) = first_number(tail) {
+            if let Some(amount) = first_amount(tail) {
                 return Some(amount);
             }
         }
@@ -250,24 +269,121 @@ fn extract_amount(text: &str) -> Option<f64> {
     for suffix in ["块钱", "块", "元"] {
         if let Some(idx) = text.find(suffix) {
             let head = &text[..idx];
-            if let Some(amount) = last_number(head) {
+            if let Some(amount) = last_amount(head) {
                 return Some(amount);
             }
         }
     }
 
-    last_number(text)
+    last_amount(text)
 }
 
-fn first_number(text: &str) -> Option<f64> {
-    scan_numbers(text).into_iter().next()
+fn first_amount(text: &str) -> Option<f64> {
+    if let Some(n) = scan_ascii_numbers(text).into_iter().next() {
+        return Some(n);
+    }
+    parse_chinese_amount_in_text(text)
 }
 
-fn last_number(text: &str) -> Option<f64> {
-    scan_numbers(text).into_iter().last()
+fn last_amount(text: &str) -> Option<f64> {
+    if let Some(n) = scan_ascii_numbers(text).into_iter().last() {
+        return Some(n);
+    }
+    parse_chinese_amount_in_text(text)
 }
 
-fn scan_numbers(text: &str) -> Vec<f64> {
+fn parse_chinese_amount_in_text(text: &str) -> Option<f64> {
+    for suffix in ["块钱", "块", "元"] {
+        if let Some(idx) = text.find(suffix) {
+            let before = text[..idx].trim();
+            let cn: String = before
+                .chars()
+                .rev()
+                .take_while(|c| is_chinese_num_char(*c))
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect();
+            if let Some(v) = chinese_to_number(&cn) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn is_chinese_num_char(c: char) -> bool {
+    matches!(
+        c,
+        '零' | '〇'
+            | '一' | '二' | '两' | '三' | '四' | '五' | '六' | '七' | '八' | '九'
+            | '壹' | '贰' | '叁' | '肆' | '伍' | '陆' | '柒' | '捌' | '玖'
+            | '十' | '拾' | '百' | '佰' | '千' | '仟' | '万' | '萬'
+    )
+}
+
+fn chinese_to_number(text: &str) -> Option<f64> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    let digit = |c: char| -> Option<f64> {
+        match c {
+            '零' | '〇' => Some(0.0),
+            '一' | '壹' => Some(1.0),
+            '二' | '两' | '贰' => Some(2.0),
+            '三' | '叁' => Some(3.0),
+            '四' | '肆' => Some(4.0),
+            '五' | '伍' => Some(5.0),
+            '六' | '陆' => Some(6.0),
+            '七' | '柒' => Some(7.0),
+            '八' | '捌' => Some(8.0),
+            '九' | '玖' => Some(9.0),
+            _ => None,
+        }
+    };
+
+    let mut total = 0.0;
+    let mut section = 0.0;
+    let mut number = 0.0;
+
+    for c in text.chars() {
+        if let Some(d) = digit(c) {
+            number = d;
+            continue;
+        }
+        match c {
+            '十' | '拾' => {
+                if number == 0.0 {
+                    number = 1.0;
+                }
+                section += number * 10.0;
+                number = 0.0;
+            }
+            '百' | '佰' => {
+                section += if number == 0.0 { 0.0 } else { number * 100.0 };
+                number = 0.0;
+            }
+            '千' | '仟' => {
+                section += number * 1000.0;
+                number = 0.0;
+            }
+            '万' | '萬' => {
+                section += number;
+                total += section * 10000.0;
+                section = 0.0;
+                number = 0.0;
+            }
+            _ => return None,
+        }
+    }
+
+    let val = total + section + number;
+    if val > 0.0 { Some(val) } else { None }
+}
+
+fn scan_ascii_numbers(text: &str) -> Vec<f64> {
     let mut numbers = Vec::new();
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
@@ -340,7 +456,7 @@ fn parse_date(value: &str) -> Option<NaiveDate> {
 
 fn detect_category_name(text: &str, tx_type: &str) -> Option<String> {
     let rules: HashMap<&str, &str> = [
-        ("餐饮", "餐饮|午饭|午餐|晚饭|晚餐|早餐|吃饭|外卖|咖啡|奶茶|火锅|烧烤"),
+        ("餐饮", "餐饮|午饭|午餐|晚饭|晚餐|早餐|吃饭|外卖|咖啡|奶茶|火锅|烧烤|包子|馒头|饺子"),
         ("交通", "交通|地铁|公交|打车|滴滴|出租|高铁|火车|机票|加油|停车"),
         ("购物", "购物|淘宝|京东|拼多多|买|超市|商场|衣服|鞋"),
         ("住房", "住房|房租|租金|物业|水电|燃气|房贷"),
@@ -517,5 +633,21 @@ mod tests {
         assert_eq!(draft.r#type, "income");
         assert!((draft.amount - 8000.0).abs() < f64::EPSILON);
         assert_eq!(draft.category_id, Some(3));
+    }
+
+    #[test]
+    fn rule_parser_chinese_numeral_amount() {
+        let config = AiConfig::default();
+        let draft = parse_transaction_nl(
+            "微信花了两块钱买包子",
+            &sample_categories(),
+            &sample_accounts(),
+            &config,
+        )
+        .expect("parse");
+
+        assert!((draft.amount - 2.0).abs() < f64::EPSILON);
+        assert_eq!(draft.account_id, Some(1));
+        assert_eq!(draft.category_id, Some(1));
     }
 }

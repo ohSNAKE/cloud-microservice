@@ -226,6 +226,7 @@ pub struct ParsedTransactionDraft {
     pub confidence: f64,
     pub source: String,
     pub raw_text: String,
+    pub parse_notice: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -78,6 +78,9 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
     setParsing(true);
     try {
       const result = await api.parseTransactionNl(text);
+      if (result.parse_notice) {
+        message.warning(result.parse_notice);
+      }
       setDraft(result);
       confirmForm.setFieldsValue({
         type: result.type,
@@ -89,7 +92,8 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
       });
       setConfirmOpen(true);
     } catch (e) {
-      message.error(String(e));
+      const msg = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+      message.error(msg || "识别失败，请检查输入或稍后重试");
     } finally {
       setParsing(false);
     }
@@ -215,6 +219,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
         onOk={handleConfirmSave}
         okText="确认入库"
         width={420}
+        zIndex={1100}
       >
         {draft && (
           <Space direction="vertical" style={{ width: "100%", marginBottom: 12 }}>

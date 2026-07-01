@@ -164,6 +164,7 @@ export interface ParsedTransactionDraft {
   confidence: number;
   source: "ai" | "rule";
   raw_text: string;
+  parse_notice: string | null;
 }
 
 export interface QuoteRefreshResult {
