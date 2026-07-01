@@ -1,0 +1,180 @@
+use chrono::Local;
+use rusqlite::{params, Connection};
+use std::path::PathBuf;
+use tauri::Manager;
+
+pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Error> {
+    let mut db_path = app_handle
+        .path()
+        .app_data_dir()
+        .expect("failed to resolve app data dir");
+    std::fs::create_dir_all(&db_path).ok();
+    db_path.push("finance.db");
+
+    let conn = Connection::open(db_path)?;
+    conn.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'cash',
+            balance REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            icon TEXT DEFAULT '📌'
+        );
+
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            amount REAL NOT NULL,
+            category_id INTEGER,
+            account_id INTEGER,
+            note TEXT DEFAULT '',
+            transaction_date TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (category_id) REFERENCES categories(id),
+            FOREIGN KEY (account_id) REFERENCES accounts(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS holdings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'stock',
+            quantity REAL NOT NULL,
+            cost_price REAL NOT NULL,
+            current_price REAL NOT NULL DEFAULT 0,
+            market TEXT NOT NULL DEFAULT 'cn',
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS price_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            holding_id INTEGER NOT NULL,
+            price REAL NOT NULL,
+            recorded_at TEXT NOT NULL,
+            FOREIGN KEY (holding_id) REFERENCES holdings(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
+        CREATE INDEX IF NOT EXISTS idx_price_history_holding ON price_history(holding_id, recorded_at);
+        ",
+    )?;
+
+    seed_defaults(&conn)?;
+    Ok(conn)
+}
+
+fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let account_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM accounts",
+        [],
+        |row| row.get(0),
+    )?;
+    if account_count == 0 {
+        for (name, kind) in [
+            ("现金", "cash"),
+            ("银行卡", "bank"),
+            ("支付宝", "alipay"),
+            ("微信", "wechat"),
+        ] {
+            conn.execute(
+                "INSERT INTO accounts (name, type, balance) VALUES (?1, ?2, 0)",
+                params![name, kind],
+            )?;
+        }
+    }
+
+    let category_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM categories",
+        [],
+        |row| row.get(0),
+    )?;
+    if category_count == 0 {
+        let categories = [
+            ("餐饮", "expense", "🍜"),
+            ("交通", "expense", "🚗"),
+            ("购物", "expense", "🛒"),
+            ("住房", "expense", "🏠"),
+            ("娱乐", "expense", "🎮"),
+            ("医疗", "expense", "💊"),
+            ("教育", "expense", "📚"),
+            ("其他支出", "expense", "📌"),
+            ("工资", "income", "💰"),
+            ("奖金", "income", "🎁"),
+            ("理财收益", "income", "📈"),
+            ("其他收入", "income", "💵"),
+        ];
+        for (name, kind, icon) in categories {
+            conn.execute(
+                "INSERT INTO categories (name, type, icon) VALUES (?1, ?2, ?3)",
+                params![name, kind, icon],
+            )?;
+        }
+    }
+
+    let settings_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM settings",
+        [],
+        |row| row.get(0),
+    )?;
+    if settings_count == 0 {
+        for (key, value) in [
+            ("quote_update_interval", "30"),
+            ("quote_update_enabled", "true"),
+            ("currency", "CNY"),
+        ] {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn get_setting(conn: &Connection, key: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        params![key],
+        |row| row.get(0),
+    )
+    .ok()
+}
+
+pub fn db_path_hint(app_handle: &tauri::AppHandle) -> PathBuf {
+    let mut path = app_handle
+        .path()
+        .app_data_dir()
+        .expect("failed to resolve app data dir");
+    path.push("finance.db");
+    path
+}
+
+pub fn now_local() -> String {
+    Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+pub fn today() -> String {
+    Local::now().format("%Y-%m-%d").to_string()
+}
+
+pub fn current_month() -> String {
+    Local::now().format("%Y-%m").to_string()
+}
