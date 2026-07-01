@@ -154,7 +154,7 @@ export interface Settings {
 
 export interface ParsedTransactionDraft {
   type: "income" | "expense";
-  amount: number;
+  amount: number | null;
   category_id: number | null;
   category_name: string | null;
   account_id: number | null;
@@ -165,6 +165,13 @@ export interface ParsedTransactionDraft {
   source: "ai" | "rule";
   raw_text: string;
   parse_notice: string | null;
+}
+
+export interface ParsedTransactionBatch {
+  raw_text: string;
+  items: ParsedTransactionDraft[];
+  parse_notice: string | null;
+  source: "ai" | "rule";
 }
 
 export interface QuoteRefreshResult {

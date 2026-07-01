@@ -1,6 +1,5 @@
 use crate::db::today;
-use crate::models::AiConfig;
-use crate::models::{Account, Category, ParsedTransactionDraft};
+use crate::models::{Account, AiConfig, Category, ParsedTransactionBatch, ParsedTransactionDraft};
 use chrono::{Duration, Local, NaiveDate};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -31,26 +30,30 @@ struct LlmParseResult {
     confidence: Option<f64>,
 }
 
-pub fn parse_transaction_nl(
+#[derive(Debug, Deserialize)]
+struct LlmBatchResult {
+    transactions: Option<Vec<LlmParseResult>>,
+}
+
+pub fn parse_transactions_nl(
     text: &str,
     categories: &[Category],
     accounts: &[Account],
     config: &AiConfig,
-) -> Result<ParsedTransactionDraft, String> {
+) -> Result<ParsedTransactionBatch, String> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Err("请输入记账内容".to_string());
     }
 
-    let draft = if config.ai_enabled && !config.ai_api_key.trim().is_empty() {
+    let segments = split_segments(trimmed);
+    let is_multi = segments.len() > 1;
+
+    let (mut items, source, mut parse_notice) = if config.ai_enabled && !config.ai_api_key.trim().is_empty() {
         match parse_with_llm(trimmed, categories, accounts, config) {
-            Ok(mut draft) => {
-                draft.parse_notice = None;
-                draft
-            }
+            Ok(result) => result,
             Err(err) => {
                 eprintln!("AI 解析失败，使用规则兜底: {err}");
-                let mut draft = parse_with_rules(trimmed, categories, accounts)?;
                 let brief = if err.contains("503") {
                     "503 服务暂时不可用".to_string()
                 } else if err.len() > 60 {
@@ -58,16 +61,117 @@ pub fn parse_transaction_nl(
                 } else {
                     err.clone()
                 };
-                draft.parse_notice =
-                    Some(format!("AI 暂不可用（{brief}），已使用本地规则识别"));
-                draft
+                let notice = Some(format!("AI 暂不可用（{brief}），已使用本地规则识别"));
+                (
+                    parse_transactions_with_rules(&segments, accounts)?,
+                    "rule".to_string(),
+                    notice,
+                )
             }
         }
     } else {
-        parse_with_rules(trimmed, categories, accounts)?
+        (
+            parse_transactions_with_rules(&segments, accounts)?,
+            "rule".to_string(),
+            None,
+        )
     };
 
-    Ok(enrich_draft(trimmed, draft, categories, accounts))
+    if items.is_empty() {
+        return Err("未能识别任何记账记录，请补充金额或拆分描述".to_string());
+    }
+
+    items = items
+        .into_iter()
+        .map(|draft| {
+            let text = draft.raw_text.clone();
+            enrich_draft(&text, draft, categories, accounts)
+        })
+        .collect();
+
+    if is_multi && items.len() > 1 && parse_notice.is_none() {
+        parse_notice = Some(format!("已识别 {} 条记录，请逐条确认", items.len()));
+    }
+
+    Ok(ParsedTransactionBatch {
+        raw_text: trimmed.to_string(),
+        items,
+        parse_notice,
+        source,
+    })
+}
+
+fn split_segments(text: &str) -> Vec<String> {
+    let mut normalized = text.to_string();
+    for phrase in [
+        "用户还提到",
+        "还提到",
+        "另外还有",
+        "同时也",
+        "以及",
+        "另外",
+        "还有",
+        "并且",
+    ] {
+        normalized = normalized.replace(phrase, "；");
+    }
+
+    normalized
+        .split(['；', ';', '\n', '。'])
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.trim_start_matches(['用', '户']).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn parse_transactions_with_rules(
+    segments: &[String],
+    accounts: &[Account],
+) -> Result<Vec<ParsedTransactionDraft>, String> {
+    let mut items = Vec::new();
+    for segment in segments {
+        if let Some(draft) = parse_segment_with_rules(segment, accounts) {
+            items.push(draft);
+        }
+    }
+    Ok(items)
+}
+
+fn parse_segment_with_rules(segment: &str, accounts: &[Account]) -> Option<ParsedTransactionDraft> {
+    let text = segment.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    let tx_type = detect_type(text);
+    let amount = extract_amount(text);
+    let transaction_date = extract_date(text).unwrap_or_else(today);
+    let category_name = detect_category_name(text, tx_type);
+    let account_name = detect_account_name(text, accounts);
+
+    if amount.is_none() && account_name.is_none() && category_name.is_none() {
+        return None;
+    }
+
+    Some(ParsedTransactionDraft {
+        r#type: tx_type.to_string(),
+        amount,
+        category_id: None,
+        category_name,
+        account_id: None,
+        account_name,
+        transaction_date,
+        note: text.to_string(),
+        confidence: if amount.is_some() { 0.55 } else { 0.35 },
+        source: "rule".to_string(),
+        raw_text: text.to_string(),
+        parse_notice: if amount.is_none() {
+            Some("未识别到金额，请手动填写".to_string())
+        } else {
+            None
+        },
+    })
 }
 
 fn parse_with_llm(
@@ -75,7 +179,7 @@ fn parse_with_llm(
     categories: &[Category],
     accounts: &[Account],
     config: &AiConfig,
-) -> Result<ParsedTransactionDraft, String> {
+) -> Result<(Vec<ParsedTransactionDraft>, String, Option<String>), String> {
     let category_lines: Vec<String> = categories
         .iter()
         .map(|c| format!("- {} ({})", c.name, c.r#type))
@@ -87,15 +191,16 @@ fn parse_with_llm(
 
     let today_str = today();
     let system_prompt = format!(
-        "你是个人财务记账助手。根据用户的中文自然语言描述，提取一条记账记录。\n\
-         只返回 JSON，不要 markdown，字段如下：\n\
-         {{\"type\":\"expense|income\",\"amount\":数字,\"category_name\":\"分类名\",\"account_name\":\"账户名\",\"transaction_date\":\"YYYY-MM-DD\",\"note\":\"备注\",\"confidence\":0到1}}\n\
+        "你是个人财务记账助手。根据用户的中文自然语言描述，提取一条或多条记账记录。\n\
+         只返回 JSON，不要 markdown，格式如下：\n\
+         {{\"transactions\":[{{\"type\":\"expense|income\",\"amount\":数字或null,\"category_name\":\"分类名\",\"account_name\":\"账户名\",\"transaction_date\":\"YYYY-MM-DD\",\"note\":\"备注\",\"confidence\":0到1}}]}}\n\
          规则：\n\
-         1. type 只能是 expense 或 income\n\
-         2. amount 必须是正数\n\
-         3. category_name 和 account_name 必须从下列列表中选择最接近的一项\n\
-         4. 未说明日期时使用今天 {today_str}\n\
-         5. note 保留用户描述中的关键信息\n\
+         1. 若描述包含多条消费（分号、还有、另外、以及等），必须拆成多条 transactions\n\
+         2. type 只能是 expense 或 income\n\
+         3. amount 必须是正数；若用户未说明金额可填 null\n\
+         4. category_name 和 account_name 必须从下列列表中选择最接近的一项\n\
+         5. 未说明日期时使用今天 {today_str}\n\
+         6. note 保留该条描述的关键信息\n\
          可用分类：\n{}\n\
          可用账户：\n{}",
         category_lines.join("\n"),
@@ -141,58 +246,56 @@ fn parse_with_llm(
         .filter(|c| !c.is_empty())
         .ok_or_else(|| "AI 未返回有效内容".to_string())?;
 
-    let llm: LlmParseResult = serde_json::from_str(content)
-        .map_err(|e| format!("AI JSON 解析失败: {e}, 原始内容: {content}"))?;
+    let llm_items = if let Ok(batch) = serde_json::from_str::<LlmBatchResult>(content) {
+        batch.transactions.unwrap_or_default()
+    } else {
+        let single: LlmParseResult = serde_json::from_str(content)
+            .map_err(|e| format!("AI JSON 解析失败: {e}, 原始内容: {content}"))?;
+        vec![single]
+    };
 
-    let tx_type = normalize_type(llm.r#type.as_deref().unwrap_or("expense"));
-    let amount = llm.amount.ok_or_else(|| "AI 未识别到金额".to_string())?;
-    if amount <= 0.0 {
-        return Err("AI 识别的金额无效".to_string());
+    if llm_items.is_empty() {
+        return Err("AI 未返回有效记账记录".to_string());
     }
 
-    Ok(ParsedTransactionDraft {
-        r#type: tx_type.to_string(),
-        amount,
-        category_id: None,
-        category_name: llm.category_name,
-        account_id: None,
-        account_name: llm.account_name,
-        transaction_date: llm
-            .transaction_date
-            .filter(|d| parse_date(d).is_some())
-            .unwrap_or_else(today),
-        note: llm.note.unwrap_or_else(|| text.to_string()),
-        confidence: llm.confidence.unwrap_or(0.85).clamp(0.0, 1.0),
-        source: "ai".to_string(),
-        raw_text: text.to_string(),
-        parse_notice: None,
-    })
+    let mut items = Vec::new();
+    for llm in &llm_items {
+        let segment = llm.note.as_deref().unwrap_or(text);
+        items.push(llm_item_to_draft(llm, segment)?);
+    }
+
+    Ok((items, "ai".to_string(), None))
 }
 
-fn parse_with_rules(
-    text: &str,
-    _categories: &[Category],
-    accounts: &[Account],
-) -> Result<ParsedTransactionDraft, String> {
-    let tx_type = detect_type(text);
-    let amount = extract_amount(text).ok_or_else(|| "未能识别金额，请包含具体数字".to_string())?;
-    let transaction_date = extract_date(text).unwrap_or_else(today);
-    let category_name = detect_category_name(text, tx_type);
-    let account_name = detect_account_name(text, accounts);
+fn llm_item_to_draft(llm: &LlmParseResult, raw_text: &str) -> Result<ParsedTransactionDraft, String> {
+    let tx_type = normalize_type(llm.r#type.as_deref().unwrap_or("expense"));
+    let amount = llm.amount.filter(|a| *a > 0.0);
 
     Ok(ParsedTransactionDraft {
         r#type: tx_type.to_string(),
         amount,
         category_id: None,
-        category_name,
+        category_name: llm.category_name.clone(),
         account_id: None,
-        account_name,
-        transaction_date,
-        note: text.to_string(),
-        confidence: 0.55,
-        source: "rule".to_string(),
-        raw_text: text.to_string(),
-        parse_notice: None,
+        account_name: llm.account_name.clone(),
+        transaction_date: llm
+            .transaction_date
+            .clone()
+            .filter(|d| parse_date(d).is_some())
+            .unwrap_or_else(today),
+        note: llm
+            .note
+            .clone()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| raw_text.to_string()),
+        confidence: llm.confidence.unwrap_or(0.85).clamp(0.0, 1.0),
+        source: "ai".to_string(),
+        raw_text: raw_text.to_string(),
+        parse_notice: if amount.is_none() {
+            Some("未识别到金额，请手动填写".to_string())
+        } else {
+            None
+        },
     })
 }
 
@@ -462,7 +565,7 @@ fn detect_category_name(text: &str, tx_type: &str) -> Option<String> {
         ("住房", "住房|房租|租金|物业|水电|燃气|房贷"),
         ("娱乐", "娱乐|电影|游戏|KTV|旅游|旅行|门票"),
         ("医疗", "医疗|医院|药|看病|体检"),
-        ("教育", "教育|书|课程|培训|学费"),
+        ("教育", "教育|书|课程|培训|学费|报纸"),
         ("工资", "工资|薪水|发薪"),
         ("奖金", "奖金|年终奖|红包"),
         ("理财收益", "理财|基金收益|股息|分红|利息"),
@@ -604,7 +707,7 @@ mod tests {
     #[test]
     fn rule_parser_extracts_expense() {
         let config = AiConfig::default();
-        let draft = parse_transaction_nl(
+        let batch = parse_transactions_nl(
             "今天中午用微信花了35块买午餐",
             &sample_categories(),
             &sample_accounts(),
@@ -612,8 +715,10 @@ mod tests {
         )
         .expect("parse");
 
+        assert_eq!(batch.items.len(), 1);
+        let draft = &batch.items[0];
         assert_eq!(draft.r#type, "expense");
-        assert!((draft.amount - 35.0).abs() < f64::EPSILON);
+        assert!((draft.amount.unwrap() - 35.0).abs() < f64::EPSILON);
         assert_eq!(draft.category_id, Some(1));
         assert_eq!(draft.account_id, Some(1));
         assert_eq!(draft.source, "rule");
@@ -622,7 +727,7 @@ mod tests {
     #[test]
     fn rule_parser_detects_income() {
         let config = AiConfig::default();
-        let draft = parse_transaction_nl(
+        let batch = parse_transactions_nl(
             "收到工资8000元",
             &sample_categories(),
             &sample_accounts(),
@@ -630,15 +735,16 @@ mod tests {
         )
         .expect("parse");
 
+        let draft = &batch.items[0];
         assert_eq!(draft.r#type, "income");
-        assert!((draft.amount - 8000.0).abs() < f64::EPSILON);
+        assert!((draft.amount.unwrap() - 8000.0).abs() < f64::EPSILON);
         assert_eq!(draft.category_id, Some(3));
     }
 
     #[test]
     fn rule_parser_chinese_numeral_amount() {
         let config = AiConfig::default();
-        let draft = parse_transaction_nl(
+        let batch = parse_transactions_nl(
             "微信花了两块钱买包子",
             &sample_categories(),
             &sample_accounts(),
@@ -646,8 +752,27 @@ mod tests {
         )
         .expect("parse");
 
-        assert!((draft.amount - 2.0).abs() < f64::EPSILON);
+        let draft = &batch.items[0];
+        assert!((draft.amount.unwrap() - 2.0).abs() < f64::EPSILON);
         assert_eq!(draft.account_id, Some(1));
         assert_eq!(draft.category_id, Some(1));
+    }
+
+    #[test]
+    fn rule_parser_multiple_segments() {
+        let config = AiConfig::default();
+        let batch = parse_transactions_nl(
+            "微信买了报纸；用户还提到支付宝花了三块钱面包",
+            &sample_categories(),
+            &sample_accounts(),
+            &config,
+        )
+        .expect("parse");
+
+        assert_eq!(batch.items.len(), 2);
+        assert_eq!(batch.items[0].account_id, Some(1));
+        assert!(batch.items[0].amount.is_none());
+        assert_eq!(batch.items[1].account_id, Some(2));
+        assert!((batch.items[1].amount.unwrap() - 3.0).abs() < f64::EPSILON);
     }
 }

@@ -18,7 +18,7 @@ import type {
   NewCategory,
   NewHolding,
   NewTransaction,
-  ParsedTransactionDraft,
+  ParsedTransactionBatch,
   QuoteRefreshResult,
   Settings,
   Transaction,
@@ -50,7 +50,7 @@ export const api = {
   deleteTransaction: (id: number) => invoke<void>("delete_transaction", { id }),
   addTransfer: (input: TransferInput) => invoke<Transaction>("add_transfer", { input }),
   parseTransactionNl: (text: string) =>
-    invoke<ParsedTransactionDraft>("parse_transaction_nl_command", { text }),
+    invoke<ParsedTransactionBatch>("parse_transaction_nl_command", { text }),
 
   getDashboard: () => invoke<DashboardSummary>("get_dashboard"),
   getMonthlyStats: (months?: number) => invoke<MonthlyStat[]>("get_monthly_stats", { months }),

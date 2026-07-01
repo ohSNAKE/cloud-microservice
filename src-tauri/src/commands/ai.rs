@@ -1,6 +1,6 @@
 use crate::db::get_setting;
-use crate::models::{Account, AiConfig, Category, ParsedTransactionDraft};
-use crate::services::ai_parser::parse_transaction_nl;
+use crate::models::{Account, AiConfig, Category, ParsedTransactionBatch};
+use crate::services::ai_parser::parse_transactions_nl;
 use crate::AppState;
 use tauri::State;
 
@@ -39,7 +39,7 @@ fn load_ai_config(conn: &rusqlite::Connection) -> AiConfig {
 pub fn parse_transaction_nl_command(
     state: State<AppState>,
     text: String,
-) -> Result<ParsedTransactionDraft, String> {
+) -> Result<ParsedTransactionBatch, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
 
     let categories = {
@@ -64,5 +64,5 @@ pub fn parse_transaction_nl_command(
 
     let config = load_ai_config(&conn);
 
-    parse_transaction_nl(text.trim(), &categories, &accounts, &config)
+    parse_transactions_nl(text.trim(), &categories, &accounts, &config)
 }

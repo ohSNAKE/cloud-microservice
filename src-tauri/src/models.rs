@@ -216,7 +216,7 @@ impl Default for AiConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ParsedTransactionDraft {
     pub r#type: String,
-    pub amount: f64,
+    pub amount: Option<f64>,
     pub category_id: Option<i64>,
     pub category_name: Option<String>,
     pub account_id: Option<i64>,
@@ -227,6 +227,14 @@ pub struct ParsedTransactionDraft {
     pub source: String,
     pub raw_text: String,
     pub parse_notice: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ParsedTransactionBatch {
+    pub raw_text: String,
+    pub items: Vec<ParsedTransactionDraft>,
+    pub parse_notice: Option<String>,
+    pub source: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
