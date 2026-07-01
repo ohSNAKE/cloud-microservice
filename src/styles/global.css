@@ -19,7 +19,7 @@ body,
 /* ── App shell ── */
 .app-sider {
   border-right: 1px solid var(--color-border-light) !important;
-  background: var(--color-surface) !important;
+  background: var(--color-sider) !important;
 }
 
 .app-sider__brand {
@@ -28,6 +28,12 @@ body,
   gap: 10px;
   padding: 18px 16px;
   margin-bottom: 4px;
+}
+
+[data-theme="dark"] .app-sider__brand {
+  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: 8px;
+  padding-bottom: 16px;
 }
 
 .app-sider__logo {
@@ -129,11 +135,30 @@ body,
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm) !important;
   border: 1px solid var(--color-border-light) !important;
-  transition: box-shadow 0.2s, transform 0.2s;
+  background: var(--color-surface) !important;
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .stat-card:hover {
   box-shadow: var(--shadow-md) !important;
+}
+
+[data-theme="dark"] .stat-card {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+}
+
+[data-theme="dark"] .stat-card .ant-card-head {
+  border-bottom-color: var(--color-border-light) !important;
+}
+
+[data-theme="dark"] .stat-card .ant-card-head-title {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .ant-card {
+  background: var(--color-surface);
+  border-color: var(--color-border-light);
 }
 
 .stat-card .label {
@@ -271,8 +296,43 @@ body,
 
 .ant-layout-sider-trigger {
   border-top: 1px solid var(--color-border-light) !important;
-  background: var(--color-surface) !important;
+  background: var(--color-sider) !important;
   color: var(--color-text-secondary) !important;
+}
+
+/* ── Sidebar menu（统一浅色 Menu + CSS 变量，避免 Ant 默认暗色蓝调） ── */
+.app-menu.ant-menu-light {
+  background: transparent !important;
+  border-inline-end: none !important;
+}
+
+.app-menu.ant-menu-light .ant-menu-item {
+  color: var(--color-text-secondary);
+  margin-inline: 8px;
+  width: calc(100% - 16px);
+}
+
+.app-menu.ant-menu-light .ant-menu-item .anticon {
+  color: var(--color-text-muted);
+}
+
+.app-menu.ant-menu-light .ant-menu-item:hover:not(.ant-menu-item-selected) {
+  background: var(--color-menu-hover) !important;
+  color: var(--color-text) !important;
+}
+
+.app-menu.ant-menu-light .ant-menu-item:hover:not(.ant-menu-item-selected) .anticon {
+  color: var(--color-text-secondary);
+}
+
+.app-menu.ant-menu-light .ant-menu-item-selected {
+  background: var(--color-menu-active) !important;
+  color: var(--color-primary) !important;
+  font-weight: 500;
+}
+
+.app-menu.ant-menu-light .ant-menu-item-selected .anticon {
+  color: var(--color-primary) !important;
 }
 
 .ant-menu-light.ant-menu-root {

@@ -15,17 +15,17 @@ const CHART_COLORS_LIGHT = {
 };
 
 const CHART_COLORS_DARK = {
-  income: "#73d13d",
-  expense: "#ff7875",
-  primary: "#4096ff",
-  primaryArea: "rgba(64, 150, 255, 0.18)",
-  candleUp: "#ef5350",
-  candleDown: "#26a69a",
-  palette: ["#4096ff", "#69b1ff", "#95de64", "#ffc53d", "#b37feb"],
-  expensePalette: ["#ff7875", "#ff9c6e", "#ffa39e", "#ffccc7", "#ffd666", "#ffc53d"],
-  textSecondary: "#9aa0a6",
-  textMuted: "#6b7280",
-  gridLine: "#2a3140",
+  income: "#6bcb77",
+  expense: "#f07178",
+  primary: "#6aabff",
+  primaryArea: "rgba(106, 171, 255, 0.16)",
+  candleUp: "#f07178",
+  candleDown: "#6bcb77",
+  palette: ["#6aabff", "#7eb8ff", "#6bcb77", "#e6b85c", "#b896e8"],
+  expensePalette: ["#f07178", "#f0898f", "#f5a5a9", "#f8c1c4", "#e6b85c", "#d4a84b"],
+  textSecondary: "#9aa3af",
+  textMuted: "#636b78",
+  gridLine: "rgba(255, 255, 255, 0.06)",
 };
 
 export type ChartColors = typeof CHART_COLORS_LIGHT | typeof CHART_COLORS_DARK;

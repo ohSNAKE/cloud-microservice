@@ -18,7 +18,6 @@ import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
 import ThemeSwitcher from "./components/theme/ThemeSwitcher";
 import { QuickAddProvider } from "./context/QuickAddContext";
-import { useTheme } from "./context/ThemeContext";
 
 const { Header, Sider, Content } = Layout;
 
@@ -46,7 +45,6 @@ function shortcutLabel() {
 function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { resolved } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -78,7 +76,7 @@ function AppLayout() {
           collapsible
           collapsed={collapsed}
           onCollapse={setCollapsed}
-          theme={resolved === "dark" ? "dark" : "light"}
+          theme="light"
           width={228}
           collapsedWidth={64}
         >
@@ -87,6 +85,8 @@ function AppLayout() {
             {!collapsed && <span className="app-sider__title">财记</span>}
           </div>
           <Menu
+            className="app-menu"
+            theme="light"
             mode="inline"
             selectedKeys={[selectedKey]}
             items={menuItems}
