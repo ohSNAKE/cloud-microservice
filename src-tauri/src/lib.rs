@@ -1,7 +1,7 @@
 mod db;
-mod models;
-mod commands;
-mod services;
+pub mod models;
+pub mod commands;
+pub mod services;
 
 use db::init_db;
 use services::scheduler::start_quote_scheduler;
