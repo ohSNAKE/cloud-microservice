@@ -170,11 +170,28 @@ pub struct Settings {
     pub quote_update_interval: i64,
     pub quote_update_enabled: bool,
     pub refresh_on_startup: bool,
+    #[serde(default = "default_currency")]
     pub currency: String,
+    #[serde(default)]
     pub ai_enabled: bool,
+    #[serde(default)]
     pub ai_api_key: String,
+    #[serde(default = "default_ai_api_base")]
     pub ai_api_base: String,
+    #[serde(default = "default_ai_model")]
     pub ai_model: String,
+}
+
+fn default_currency() -> String {
+    "CNY".to_string()
+}
+
+fn default_ai_api_base() -> String {
+    "https://v2.pincc.ai/v1".to_string()
+}
+
+fn default_ai_model() -> String {
+    "gpt-4o-mini".to_string()
 }
 
 #[derive(Debug, Clone)]

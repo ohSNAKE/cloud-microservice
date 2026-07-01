@@ -25,11 +25,23 @@ export default function SettingsPage() {
   }, [form]);
 
   const handleSave = async () => {
-    const values = await form.validateFields();
     setLoading(true);
     try {
-      await api.updateSettings(values);
+      await form.validateFields();
+      const [current, values] = await Promise.all([
+        api.getSettings(),
+        Promise.resolve(form.getFieldsValue(true) as Partial<Settings>),
+      ]);
+      const merged: Settings = { ...current, ...values };
+      await api.updateSettings(merged);
+      form.setFieldsValue(merged);
       message.success("设置已保存");
+    } catch (e: unknown) {
+      if (e && typeof e === "object" && "errorFields" in e) {
+        message.error("请检查表单是否填写完整");
+      } else {
+        message.error(`保存失败：${String(e)}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -70,7 +82,10 @@ export default function SettingsPage() {
         <p>行情同步、智能记账、数据备份与应用配置</p>
       </div>
 
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" preserve>
+        <Form.Item name="currency" hidden>
+          <Input />
+        </Form.Item>
         <Card title="智能记账" style={{ maxWidth: 560, marginBottom: 16 }}>
           <Form.Item name="ai_enabled" label="启用 AI 识别" valuePropName="checked">
             <Switch />
@@ -80,13 +95,13 @@ export default function SettingsPage() {
             label="API Key"
             extra="支持 OpenAI 兼容接口（默认 PinCC）。Key 仅存本地数据库，不会上传。"
           >
-            <Input.Password placeholder="sk-..." disabled={!aiEnabled} />
+            <Input.Password placeholder="sk-..." readOnly={!aiEnabled} />
           </Form.Item>
           <Form.Item name="ai_api_base" label="API 地址">
-            <Input placeholder="https://v2.pincc.ai/v1" disabled={!aiEnabled} />
+            <Input placeholder="https://v2.pincc.ai/v1" readOnly={!aiEnabled} />
           </Form.Item>
           <Form.Item name="ai_model" label="模型">
-            <Input placeholder="gpt-4o-mini" disabled={!aiEnabled} />
+            <Input placeholder="gpt-4o-mini" readOnly={!aiEnabled} />
           </Form.Item>
         </Card>
 
