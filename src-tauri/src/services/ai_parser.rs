@@ -115,8 +115,8 @@ fn parse_with_llm(
     });
 
     let response = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(10))
-        .timeout_read(std::time::Duration::from_secs(20))
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout_read(std::time::Duration::from_secs(90))
         .build()
         .post(&url)
         .set("Authorization", &format!("Bearer {}", config.ai_api_key.trim()))
