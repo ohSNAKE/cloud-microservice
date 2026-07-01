@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from
 import { listen } from "@tauri-apps/api/event";
 import {
   BarChartOutlined,
+  BankOutlined,
   DashboardOutlined,
   LineChartOutlined,
   PlusOutlined,
@@ -11,6 +12,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Space, Typography } from "antd";
 import DashboardPage from "./pages/Dashboard";
+import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
 import HoldingsPage from "./pages/Holdings";
 import ReportsPage from "./pages/Reports";
@@ -23,6 +25,7 @@ const { Header, Sider, Content } = Layout;
 
 const menuItems = [
   { key: "/", icon: <DashboardOutlined />, label: "财务总览" },
+  { key: "/assets", icon: <BankOutlined />, label: "我的资产" },
   { key: "/transactions", icon: <WalletOutlined />, label: "记账" },
   { key: "/holdings", icon: <LineChartOutlined />, label: "投资持仓" },
   { key: "/reports", icon: <BarChartOutlined />, label: "报表分析" },
@@ -31,6 +34,7 @@ const menuItems = [
 
 const routeMeta: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "财务总览", subtitle: "一眼看清资产、收支与预算" },
+  "/assets": { title: "我的资产", subtitle: "登记银行卡、支付宝、现金等个人余额" },
   "/transactions": { title: "记账", subtitle: "追踪每一笔收入与支出" },
   "/holdings": { title: "投资持仓", subtitle: "股票基金市值与盈亏" },
   "/reports": { title: "报表分析", subtitle: "分类统计、预算与趋势" },
@@ -115,6 +119,7 @@ function AppLayout() {
             <div className="app-content-inner" key={refreshKey}>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
+                <Route path="/assets" element={<AssetsPage />} />
                 <Route path="/transactions" element={<TransactionsPage />} />
                 <Route path="/holdings" element={<HoldingsPage />} />
                 <Route path="/reports" element={<ReportsPage />} />

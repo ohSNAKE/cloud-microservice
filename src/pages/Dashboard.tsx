@@ -4,6 +4,7 @@ import { Button, Card, Col, Row, Statistic, Typography, Alert } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  BankOutlined,
   LineChartOutlined,
   PlusOutlined,
   WalletOutlined,
@@ -106,6 +107,9 @@ export default function DashboardPage() {
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
               <Button type="primary" icon={<PlusOutlined />} onClick={openQuickAdd}>
                 智能记第一笔
+              </Button>
+              <Button icon={<BankOutlined />} onClick={() => navigate("/assets")}>
+                登记个人资产
               </Button>
               <Button icon={<LineChartOutlined />} onClick={() => navigate("/holdings")}>
                 添加投资持仓

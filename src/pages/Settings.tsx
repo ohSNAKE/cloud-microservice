@@ -18,6 +18,7 @@ import { api } from "../api";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
 import ThemeSwitcher from "../components/theme/ThemeSwitcher";
+import SalarySettingsCard from "../components/settings/SalarySettingsCard";
 import { useTheme } from "../context/ThemeContext";
 import type { Settings } from "../types";
 
@@ -151,6 +152,10 @@ export default function SettingsPage() {
                 <Input placeholder="gpt-4o-mini" readOnly={!aiEnabled} />
               </Form.Item>
             </Card>
+          </Col>
+
+          <Col xs={24} lg={12}>
+            <SalarySettingsCard />
           </Col>
 
           <Col xs={24} lg={12}>

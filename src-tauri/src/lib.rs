@@ -78,6 +78,7 @@ pub fn run() {
             commands::get_budget_alerts,
             commands::list_recurring_rules,
             commands::add_recurring_rule,
+            commands::update_recurring_rule,
             commands::toggle_recurring_rule,
             commands::delete_recurring_rule,
             commands::list_holdings,

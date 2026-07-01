@@ -26,8 +26,10 @@ import type {
   TransferInput,
   UpdateAccount,
   UpdateCategory,
+  UpdateRecurringRule,
   UpdateTransaction,
 } from "../types";
+import { ACCOUNT_TYPES } from "../types";
 
 export const api = {
   listAccounts: () => invoke<Account[]>("list_accounts"),
@@ -66,6 +68,8 @@ export const api = {
 
   listRecurringRules: () => invoke<RecurringRule[]>("list_recurring_rules"),
   addRecurringRule: (input: NewRecurringRule) => invoke<RecurringRule>("add_recurring_rule", { input }),
+  updateRecurringRule: (id: number, input: UpdateRecurringRule) =>
+    invoke<RecurringRule>("update_recurring_rule", { id, input }),
   toggleRecurringRule: (id: number, enabled: boolean) =>
     invoke<void>("toggle_recurring_rule", { id, enabled }),
   deleteRecurringRule: (id: number) => invoke<void>("delete_recurring_rule", { id }),
@@ -102,6 +106,8 @@ export function formatPercent(value: number) {
 }
 
 export function accountTypeLabel(type: string) {
+  const found = ACCOUNT_TYPES.find((t) => t.value === type);
+  if (found) return found.label;
   const map: Record<string, string> = {
     cash: "现金",
     bank: "银行卡",
@@ -110,4 +116,9 @@ export function accountTypeLabel(type: string) {
     broker: "证券账户",
   };
   return map[type] ?? type;
+}
+
+export function accountTypeIcon(type: string) {
+  const found = ACCOUNT_TYPES.find((t) => t.value === type);
+  return found?.icon ?? "💰";
 }

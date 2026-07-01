@@ -511,7 +511,7 @@ export default function TransactionsPage() {
         <Form form={accountForm} layout="vertical">
           <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-            <Select options={ACCOUNT_TYPES} />
+            <Select options={ACCOUNT_TYPES.map((t) => ({ label: `${t.icon} ${t.label}`, value: t.value }))} />
           </Form.Item>
           <Form.Item name="balance" label="当前余额" rules={[{ required: true }]}>
             <InputNumber min={0} precision={2} style={{ width: "100%" }} prefix="¥" />

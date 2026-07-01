@@ -252,15 +252,24 @@ export interface NewRecurringRule {
   day_of_month: number;
 }
 
+export interface UpdateRecurringRule {
+  type: "income" | "expense";
+  amount: number;
+  category_id?: number;
+  account_id?: number;
+  note?: string;
+  day_of_month: number;
+}
+
 export interface PortfolioHistoryPoint {
   date: string;
   total_value: number;
 }
 
 export const ACCOUNT_TYPES = [
-  { label: "现金", value: "cash" },
-  { label: "银行卡", value: "bank" },
-  { label: "支付宝", value: "alipay" },
-  { label: "微信", value: "wechat" },
-  { label: "证券账户", value: "broker" },
-];
+  { label: "现金", value: "cash", icon: "💵" },
+  { label: "银行卡", value: "bank", icon: "🏦" },
+  { label: "支付宝", value: "alipay", icon: "💙" },
+  { label: "微信", value: "wechat", icon: "💚" },
+  { label: "证券账户", value: "broker", icon: "📈" },
+] as const;

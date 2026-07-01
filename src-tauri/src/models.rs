@@ -358,6 +358,16 @@ pub struct NewRecurringRule {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateRecurringRule {
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub account_id: Option<i64>,
+    pub note: Option<String>,
+    pub day_of_month: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PortfolioHistoryPoint {
     pub date: String,
     pub total_value: f64,

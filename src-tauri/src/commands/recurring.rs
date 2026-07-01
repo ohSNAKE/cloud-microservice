@@ -1,5 +1,5 @@
 use crate::db::{current_month, now_local, today};
-use crate::models::{NewRecurringRule, RecurringRule};
+use crate::models::{NewRecurringRule, RecurringRule, UpdateRecurringRule};
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -63,6 +63,39 @@ pub fn add_recurring_rule(state: State<AppState>, input: NewRecurringRule) -> Re
     )
     .map_err(|e| e.to_string())?;
     let id = conn.last_insert_rowid();
+    conn.query_row(
+        &format!("{RULE_SELECT} WHERE r.id = ?1"),
+        params![id],
+        map_rule,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_recurring_rule(
+    state: State<AppState>,
+    id: i64,
+    input: UpdateRecurringRule,
+) -> Result<RecurringRule, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let note = input.note.unwrap_or_default();
+    let day = input.day_of_month.clamp(1, 28);
+
+    conn.execute(
+        "UPDATE recurring_rules SET type = ?1, amount = ?2, category_id = ?3, account_id = ?4,
+         note = ?5, day_of_month = ?6 WHERE id = ?7",
+        params![
+            input.r#type,
+            input.amount,
+            input.category_id,
+            input.account_id,
+            note,
+            day,
+            id
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
     conn.query_row(
         &format!("{RULE_SELECT} WHERE r.id = ?1"),
         params![id],
