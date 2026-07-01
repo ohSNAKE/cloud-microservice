@@ -120,6 +120,12 @@ body,
   padding: 20px 24px 32px !important;
   max-width: var(--content-max-width);
   background: var(--color-bg);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.app-content::-webkit-scrollbar {
+  display: none;
 }
 
 .app-content-inner {
