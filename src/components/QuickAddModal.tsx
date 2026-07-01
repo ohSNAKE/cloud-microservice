@@ -54,22 +54,9 @@ function DraftItemEditor({
 }) {
   return (
     <div
-      style={{
-        padding: "10px 12px",
-        borderRadius: 8,
-        background: "#fafafa",
-        border: "1px solid #f0f0f0",
-      }}
+      className="draft-item"
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 8,
-          gap: 8,
-        }}
-      >
+      <div className="draft-item__header">
         <Typography.Text strong style={{ fontSize: 13 }}>
           #{index + 1}
         </Typography.Text>
@@ -306,6 +293,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
 
   return (
     <Modal
+      className="quick-add-modal"
       title="快速记账 (⌘N)"
       open={open}
       onCancel={onClose}
@@ -328,15 +316,8 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
             ),
             children: (
               <Spin spinning={parsing} tip="正在识别，请稍候..." size="large">
-                <div style={{ display: "flex", gap: 16, minHeight: 400 }}>
-                  <div
-                    style={{
-                      flex: "0 0 340px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 12,
-                    }}
-                  >
+                <div className="quick-add-modal__layout">
+                  <div className="quick-add-modal__input-panel">
                     <Typography.Text type="secondary" style={{ fontSize: 13 }}>
                       支持多条描述，用分号或「还有」分隔
                     </Typography.Text>
@@ -360,25 +341,10 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
                     </Button>
                   </div>
 
-                  <Divider type="vertical" style={{ height: "auto", margin: 0 }} />
+                  <Divider type="vertical" className="quick-add-modal__divider" />
 
-                  <div
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                      maxHeight: 460,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: 10,
-                      }}
-                    >
+                  <div className="quick-add-modal__result-panel">
+                    <div className="quick-add-modal__result-header">
                       <Typography.Text strong>识别结果</Typography.Text>
                       {parsing ? (
                         <Tag icon={<LoadingOutlined spin />} color="processing">
@@ -394,16 +360,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
                       )}
                     </div>
 
-                    <div
-                      style={{
-                        flex: 1,
-                        overflowY: "auto",
-                        paddingRight: 4,
-                        minHeight: 280,
-                        borderRadius: 8,
-                        background: parsing ? "#fafafa" : undefined,
-                      }}
-                    >
+                    <div className={`quick-add-modal__result-scroll${parsing ? " is-loading" : ""}`}>
                       {parsing ? (
                         <div style={{ padding: "16px 8px" }}>
                           <Skeleton active paragraph={{ rows: 5 }} />

@@ -24,6 +24,8 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { api, accountTypeLabel, formatMoney } from "../api";
+import PageHeader from "../components/layout/PageHeader";
+import { useQuickAdd } from "../context/QuickAddContext";
 import type {
   Account,
   Category,
@@ -42,6 +44,7 @@ type TxFormMode = "expense" | "income" | "transfer" | "edit";
 
 export default function TransactionsPage() {
   const [searchParams] = useSearchParams();
+  const { openQuickAdd } = useQuickAdd();
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -212,21 +215,37 @@ export default function TransactionsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h2>记账</h2>
-        <p>追踪每一笔收入与支出，掌握资金流向</p>
-      </div>
+      <PageHeader
+        actions={
+          <>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openQuickAdd}>
+              智能记账
+            </Button>
+            <Button onClick={() => openModal("expense")}>记支出</Button>
+            <Button onClick={() => openModal("income")}>记收入</Button>
+            <Button icon={<SwapOutlined />} onClick={() => openModal("transfer")}>
+              转账
+            </Button>
+          </>
+        }
+      />
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space size="large" wrap>
-          <span>本月收入：<strong className="profit-negative">{formatMoney(monthSummary.income)}</strong></span>
-          <span>本月支出：<strong className="profit-positive">{formatMoney(monthSummary.expense)}</strong></span>
-          <span>结余：<strong>{formatMoney(monthSummary.balance)}</strong></span>
-        </Space>
+      <Card className="stat-card" style={{ marginBottom: 16 }}>
+        <div className="summary-strip">
+          <span className="summary-strip__item">
+            本月收入：<strong className="amount-income">{formatMoney(monthSummary.income)}</strong>
+          </span>
+          <span className="summary-strip__item">
+            本月支出：<strong className="amount-expense">{formatMoney(monthSummary.expense)}</strong>
+          </span>
+          <span className="summary-strip__item">
+            结余：<strong>{formatMoney(monthSummary.balance)}</strong>
+          </span>
+        </div>
       </Card>
 
-      <Card>
-        <Space style={{ marginBottom: 16 }} wrap>
+      <Card className="stat-card">
+        <div className="filter-bar">
           <DatePicker picker="month" value={dayjs(month)} onChange={(v) => setMonth(v?.format("YYYY-MM") ?? month)} />
           <Select
             allowClear
@@ -257,10 +276,7 @@ export default function TransactionsPage() {
             options={categories.map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
           />
           <Input.Search placeholder="搜索备注" allowClear onSearch={setKeyword} style={{ width: 160 }} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal("expense")}>记支出</Button>
-          <Button icon={<PlusOutlined />} onClick={() => openModal("income")}>记收入</Button>
-          <Button icon={<SwapOutlined />} onClick={() => openModal("transfer")}>转账</Button>
-        </Space>
+        </div>
 
         <Tabs
           items={[

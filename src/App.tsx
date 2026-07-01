@@ -5,16 +5,18 @@ import {
   BarChartOutlined,
   DashboardOutlined,
   LineChartOutlined,
+  PlusOutlined,
   SettingOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu, Typography } from "antd";
+import { Button, Layout, Menu, Space, Typography } from "antd";
 import DashboardPage from "./pages/Dashboard";
 import TransactionsPage from "./pages/Transactions";
 import HoldingsPage from "./pages/Holdings";
 import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
+import { QuickAddProvider } from "./context/QuickAddContext";
 
 const { Header, Sider, Content } = Layout;
 
@@ -26,6 +28,19 @@ const menuItems = [
   { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];
 
+const routeMeta: Record<string, { title: string; subtitle: string }> = {
+  "/": { title: "财务总览", subtitle: "一眼看清资产、收支与预算" },
+  "/transactions": { title: "记账", subtitle: "追踪每一笔收入与支出" },
+  "/holdings": { title: "投资持仓", subtitle: "股票基金市值与盈亏" },
+  "/reports": { title: "报表分析", subtitle: "分类统计、预算与趋势" },
+  "/settings": { title: "设置", subtitle: "AI 记账、行情与数据备份" },
+};
+
+function shortcutLabel() {
+  const isMac = navigator.platform.toLowerCase().includes("mac");
+  return isMac ? "⌘N" : "Ctrl+N";
+}
+
 function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,6 +48,9 @@ function AppLayout() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const selectedKey = useMemo(() => location.pathname || "/", [location.pathname]);
+  const meta = routeMeta[selectedKey] ?? routeMeta["/"];
+
+  const openQuickAdd = () => setQuickAddOpen(true);
 
   useEffect(() => {
     const unlisten = listen("quick-add-transaction", () => setQuickAddOpen(true));
@@ -50,55 +68,65 @@ function AppLayout() {
   }, []);
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        theme="light"
-        width={220}
-        style={{ borderRight: "1px solid #eef2f7" }}
-      >
-        <div style={{ padding: "20px 16px", fontWeight: 700, fontSize: 18 }}>财记</div>
-        <Menu
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-        />
-      </Sider>
-      <Layout>
-        <Header
-          style={{
-            background: "#fff",
-            borderBottom: "1px solid #eef2f7",
-            padding: "0 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
+    <QuickAddProvider openQuickAdd={openQuickAdd}>
+      <Layout style={{ minHeight: "100vh" }}>
+        <Sider
+          className="app-sider"
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          theme="light"
+          width={228}
+          collapsedWidth={64}
         >
-          <Typography.Text type="secondary">
-            管理资产 · 追踪支出 · 按 ⌘N 智能记账
-          </Typography.Text>
-        </Header>
-        <Content style={{ padding: 24 }} key={refreshKey}>
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/transactions" element={<TransactionsPage />} />
-            <Route path="/holdings" element={<HoldingsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Content>
+          <div className="app-sider__brand">
+            <div className="app-sider__logo">财</div>
+            {!collapsed && <span className="app-sider__title">财记</span>}
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={[selectedKey]}
+            items={menuItems}
+            onClick={({ key }) => navigate(key)}
+          />
+        </Sider>
+        <Layout>
+          <Header className="app-header">
+            <div>
+              <Typography.Text className="app-header__title">{meta.title}</Typography.Text>
+              <Typography.Paragraph className="app-header__subtitle" style={{ margin: 0 }}>
+                {meta.subtitle}
+              </Typography.Paragraph>
+            </div>
+            <Space>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {shortcutLabel()} 智能记账
+              </Typography.Text>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openQuickAdd}>
+                智能记账
+              </Button>
+            </Space>
+          </Header>
+          <Content className="app-content">
+            <div className="app-content-inner" key={refreshKey}>
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/transactions" element={<TransactionsPage />} />
+                <Route path="/holdings" element={<HoldingsPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </Content>
+        </Layout>
+        <QuickAddModal
+          open={quickAddOpen}
+          onClose={() => setQuickAddOpen(false)}
+          onSuccess={() => setRefreshKey((k) => k + 1)}
+        />
       </Layout>
-      <QuickAddModal
-        open={quickAddOpen}
-        onClose={() => setQuickAddOpen(false)}
-        onSuccess={() => setRefreshKey((k) => k + 1)}
-      />
-    </Layout>
+    </QuickAddProvider>
   );
 }
 

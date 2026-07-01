@@ -25,11 +25,15 @@ import {
 } from "@ant-design/icons";
 import ReactECharts from "echarts-for-react";
 import { api, formatMoney, formatPercent } from "../api";
+import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
+import PageHeader from "../components/layout/PageHeader";
+import PageLoader from "../components/layout/PageLoader";
 import KlineChart from "../components/KlineChart";
+import { CHART_COLORS } from "../constants/chartTheme";
 import type { Holding } from "../types";
 
 export default function HoldingsPage() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [failedCodes, setFailedCodes] = useState<string[]>([]);
@@ -98,43 +102,66 @@ export default function HoldingsPage() {
   const totalMarketValue = holdings.reduce((sum, item) => sum + item.market_value, 0);
   const totalProfit = holdings.reduce((sum, item) => sum + item.profit, 0);
 
-  const allocationOption = useMemo(() => ({
-    tooltip: { trigger: "item" },
-    series: [{
-      type: "pie",
-      radius: ["40%", "65%"],
-      data: holdings.map((h) => ({ name: h.name, value: h.market_value })),
-    }],
-  }), [holdings]);
+  const allocationOption = useMemo(
+    () => ({
+      tooltip: { trigger: "item" },
+      color: [CHART_COLORS.primary, "#69b1ff", "#95de64", "#ffc53d", "#b37feb"],
+      series: [
+        {
+          type: "pie",
+          radius: ["40%", "65%"],
+          data: holdings.map((h) => ({ name: h.name || h.code, value: h.market_value })),
+        },
+      ],
+    }),
+    [holdings],
+  );
+
+  if (loading) {
+    return <PageLoader tip="加载持仓数据..." />;
+  }
 
   return (
     <div>
-      <div className="page-header">
-        <h2>投资持仓</h2>
-        <p>管理股票与基金，追踪市值与盈亏</p>
-      </div>
+      <PageHeader
+        actions={
+          <>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
+              添加持仓
+            </Button>
+            <Button icon={<SyncOutlined />} loading={refreshing} onClick={handleRefresh}>
+              刷新行情
+            </Button>
+          </>
+        }
+      />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={16}>
-          <Card>
-            <Space size="large" wrap>
-              <span>总市值：<strong>{formatMoney(totalMarketValue)}</strong></span>
-              <span>
+        <Col xs={24} md={holdings.length > 0 ? 16 : 24}>
+          <Card className="stat-card">
+            <div className="summary-strip">
+              <span className="summary-strip__item">
+                总市值：<strong>{formatMoney(totalMarketValue)}</strong>
+              </span>
+              <span className="summary-strip__item">
                 总盈亏：
                 <strong className={totalProfit >= 0 ? "profit-positive" : "profit-negative"}>
                   {formatMoney(totalProfit)}
                 </strong>
               </span>
-            </Space>
+              <span className="summary-strip__item">
+                持仓数量：<strong>{holdings.length} 个</strong>
+              </span>
+            </div>
           </Card>
         </Col>
-        <Col xs={24} md={8}>
-          {holdings.length > 0 && (
-            <Card title="组合占比" bodyStyle={{ padding: 8 }}>
+        {holdings.length > 0 && (
+          <Col xs={24} md={8}>
+            <Card className="stat-card" title="组合占比" bodyStyle={{ padding: 8 }}>
               <ReactECharts option={allocationOption} style={{ height: 120 }} />
             </Card>
-          )}
-        </Col>
+          </Col>
+        )}
       </Row>
 
       {failedCodes.length > 0 && (
@@ -148,52 +175,82 @@ export default function HoldingsPage() {
         />
       )}
 
-      <Card>
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>添加持仓</Button>
-          <Button icon={<SyncOutlined />} loading={refreshing} onClick={handleRefresh}>刷新行情</Button>
-        </Space>
-
-        <Table<Holding>
-          rowKey="id"
-          loading={loading}
-          dataSource={holdings}
-          pagination={{ pageSize: 10 }}
-          locale={{ emptyText: "暂无持仓，点击「添加持仓」开始追踪投资" }}
-          columns={[
-            { title: "代码", dataIndex: "code", width: 90 },
-            { title: "名称", dataIndex: "name" },
-            {
-              title: "类型", dataIndex: "type", width: 80,
-              render: (t: string) => t === "fund" ? <Tag color="blue">基金</Tag> : <Tag color="purple">股票</Tag>,
-            },
-            { title: "数量", dataIndex: "quantity" },
-            { title: "成本", dataIndex: "cost_price", render: (v: number) => v.toFixed(3) },
-            { title: "现价", dataIndex: "current_price", render: (v: number) => v.toFixed(3) },
-            { title: "市值", dataIndex: "market_value", render: (v: number) => formatMoney(v) },
-            {
-              title: "盈亏",
-              render: (_, r) => (
-                <span className={r.profit >= 0 ? "profit-positive" : "profit-negative"}>
-                  {formatMoney(r.profit)} ({formatPercent(r.profit_rate)})
-                </span>
-              ),
-            },
-            { title: "更新", dataIndex: "updated_at", width: 160 },
-            {
-              title: "操作", width: 140,
-              render: (_, r) => (
-                <Space>
-                  <Button type="link" size="small" icon={<LineChartOutlined />} onClick={() => setKlineHolding(r)}>K线</Button>
-                  <Button type="link" size="small" icon={<EditOutlined />} onClick={() => { setEditing(r); editForm.setFieldsValue({ quantity: r.quantity, cost_price: r.cost_price }); setEditOpen(true); }}>编辑</Button>
-                  <Popconfirm title="确认删除？" onConfirm={async () => { await api.deleteHolding(r.id); message.success("已删除"); loadData(); }}>
-                    <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-                  </Popconfirm>
-                </Space>
-              ),
-            },
-          ]}
-        />
+      <Card className="stat-card">
+        {holdings.length === 0 ? (
+          <EmptyPlaceholder description="暂无持仓，添加股票或基金开始追踪投资">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
+              添加第一笔持仓
+            </Button>
+          </EmptyPlaceholder>
+        ) : (
+          <Table<Holding>
+            rowKey="id"
+            dataSource={holdings}
+            pagination={{ pageSize: 10 }}
+            columns={[
+              { title: "代码", dataIndex: "code", width: 90 },
+              { title: "名称", dataIndex: "name" },
+              {
+                title: "类型",
+                dataIndex: "type",
+                width: 80,
+                render: (t: string) =>
+                  t === "fund" ? <Tag color="blue">基金</Tag> : <Tag color="purple">股票</Tag>,
+              },
+              { title: "数量", dataIndex: "quantity" },
+              { title: "成本", dataIndex: "cost_price", render: (v: number) => v.toFixed(3) },
+              { title: "现价", dataIndex: "current_price", render: (v: number) => v.toFixed(3) },
+              { title: "市值", dataIndex: "market_value", render: (v: number) => formatMoney(v) },
+              {
+                title: "盈亏",
+                render: (_, r) => (
+                  <span className={r.profit >= 0 ? "profit-positive" : "profit-negative"}>
+                    {formatMoney(r.profit)} ({formatPercent(r.profit_rate)})
+                  </span>
+                ),
+              },
+              { title: "更新", dataIndex: "updated_at", width: 160 },
+              {
+                title: "操作",
+                width: 140,
+                render: (_, r) => (
+                  <Space>
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<LineChartOutlined />}
+                      onClick={() => setKlineHolding(r)}
+                    >
+                      K线
+                    </Button>
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => {
+                        setEditing(r);
+                        editForm.setFieldsValue({ quantity: r.quantity, cost_price: r.cost_price });
+                        setEditOpen(true);
+                      }}
+                    >
+                      编辑
+                    </Button>
+                    <Popconfirm
+                      title="确认删除？"
+                      onConfirm={async () => {
+                        await api.deleteHolding(r.id);
+                        message.success("已删除");
+                        loadData();
+                      }}
+                    >
+                      <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        )}
       </Card>
 
       <Modal title="添加持仓" open={addOpen} onCancel={() => setAddOpen(false)} onOk={handleAdd} destroyOnClose>
@@ -204,7 +261,9 @@ export default function HoldingsPage() {
           <Form.Item name="code" label="代码" rules={[{ required: true }]} extra="股票如 600519，基金如 000001">
             <Input />
           </Form.Item>
-          <Form.Item name="name" label="名称"><Input placeholder="可选" /></Form.Item>
+          <Form.Item name="name" label="名称">
+            <Input placeholder="可选" />
+          </Form.Item>
           <Form.Item name="quantity" label="数量" rules={[{ required: true }]}>
             <InputNumber min={0.0001} precision={4} style={{ width: "100%" }} />
           </Form.Item>
@@ -214,7 +273,13 @@ export default function HoldingsPage() {
         </Form>
       </Modal>
 
-      <Modal title={`编辑 ${editing?.name}`} open={editOpen} onCancel={() => setEditOpen(false)} onOk={handleEdit} destroyOnClose>
+      <Modal
+        title={`编辑 ${editing?.name}`}
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        onOk={handleEdit}
+        destroyOnClose
+      >
         <Form form={editForm} layout="vertical">
           <Form.Item name="quantity" label="持有数量" rules={[{ required: true }]}>
             <InputNumber min={0.0001} precision={4} style={{ width: "100%" }} />
