@@ -1,6 +1,8 @@
 use crate::db::{get_setting, now_local, today};
-use crate::models::{Holding, NewHolding, PricePoint, QuoteRefreshResult};
-use crate::services::quote::{fetch_fund_price, fetch_stock_price, lookup_stock_name};
+use crate::models::{Holding, KlineData, NewHolding, PricePoint, QuoteRefreshResult};
+use crate::services::quote::{
+    fetch_fund_kline, fetch_fund_price, fetch_stock_kline, fetch_stock_price, lookup_stock_name,
+};
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -147,6 +149,31 @@ pub fn get_price_history(
     let mut points: Vec<PricePoint> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
     points.reverse();
     Ok(points)
+}
+
+#[tauri::command]
+pub async fn get_kline_data(
+    code: String,
+    kind: String,
+    period: Option<String>,
+    limit: Option<i64>,
+) -> Result<KlineData, String> {
+    let period = period.unwrap_or_else(|| "day".to_string());
+    let limit = limit.unwrap_or(120);
+
+    if kind == "fund" {
+        let bars = fetch_fund_kline(&code, limit).await?;
+        return Ok(KlineData {
+            bars,
+            chart_type: "line".to_string(),
+        });
+    }
+
+    let bars = fetch_stock_kline(&code, &period, limit).await?;
+    Ok(KlineData {
+        bars,
+        chart_type: "candlestick".to_string(),
+    })
 }
 
 #[tauri::command]

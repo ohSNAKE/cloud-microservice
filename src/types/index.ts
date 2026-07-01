@@ -91,3 +91,20 @@ export interface QuoteRefreshResult {
   failed: number;
   message: string;
 }
+
+export interface KlineBar {
+  date: string;
+  open: number;
+  close: number;
+  low: number;
+  high: number;
+  volume: number;
+  change_pct: number;
+}
+
+export interface KlineData {
+  bars: KlineBar[];
+  chart_type: "candlestick" | "line";
+}
+
+export type KlinePeriod = "day" | "week" | "month";

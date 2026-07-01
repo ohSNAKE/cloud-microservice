@@ -115,3 +115,20 @@ pub struct QuoteRefreshResult {
     pub failed: usize,
     pub message: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KlineBar {
+    pub date: String,
+    pub open: f64,
+    pub close: f64,
+    pub low: f64,
+    pub high: f64,
+    pub volume: f64,
+    pub change_pct: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KlineData {
+    pub bars: Vec<KlineBar>,
+    pub chart_type: String,
+}

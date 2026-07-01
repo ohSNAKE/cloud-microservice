@@ -37,6 +37,7 @@ pub fn run() {
             commands::update_holding,
             commands::delete_holding,
             commands::get_price_history,
+            commands::get_kline_data,
             commands::refresh_quotes,
             commands::get_settings,
             commands::update_settings,

@@ -13,8 +13,9 @@ import {
   Tag,
   message,
 } from "antd";
-import { DeleteOutlined, PlusOutlined, SyncOutlined } from "@ant-design/icons";
+import { DeleteOutlined, LineChartOutlined, PlusOutlined, SyncOutlined } from "@ant-design/icons";
 import { api, formatMoney, formatPercent } from "../api";
+import KlineChart from "../components/KlineChart";
 import type { Holding } from "../types";
 
 export default function HoldingsPage() {
@@ -22,6 +23,7 @@ export default function HoldingsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [open, setOpen] = useState(false);
+  const [klineHolding, setKlineHolding] = useState<Holding | null>(null);
   const [form] = Form.useForm();
 
   const loadData = useCallback(async () => {
@@ -159,11 +161,21 @@ export default function HoldingsPage() {
             },
             {
               title: "操作",
-              width: 80,
+              width: 120,
               render: (_, record) => (
-                <Popconfirm title="确认删除该持仓？" onConfirm={() => handleDelete(record.id)}>
-                  <Button type="text" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                <Space>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<LineChartOutlined />}
+                    onClick={() => setKlineHolding(record)}
+                  >
+                    K线
+                  </Button>
+                  <Popconfirm title="确认删除该持仓？" onConfirm={() => handleDelete(record.id)}>
+                    <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </Space>
               ),
             },
           ]}
@@ -208,6 +220,23 @@ export default function HoldingsPage() {
             <InputNumber min={0.0001} precision={4} style={{ width: "100%" }} prefix="¥" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+          klineHolding
+            ? `${klineHolding.name}（${klineHolding.code}）${
+                klineHolding.type === "fund" ? "净值走势" : "K线图"
+              }`
+            : "K线图"
+        }
+        open={!!klineHolding}
+        onCancel={() => setKlineHolding(null)}
+        footer={null}
+        width={960}
+        destroyOnClose
+      >
+        {klineHolding && <KlineChart holding={klineHolding} />}
       </Modal>
     </div>
   );

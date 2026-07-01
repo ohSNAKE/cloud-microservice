@@ -4,6 +4,8 @@ import type {
   Category,
   DashboardSummary,
   Holding,
+  KlineData,
+  KlinePeriod,
   MonthlyStat,
   NewHolding,
   NewTransaction,
@@ -28,6 +30,8 @@ export const api = {
     invoke<Holding>("update_holding", { id, quantity, costPrice }),
   deleteHolding: (id: number) => invoke<void>("delete_holding", { id }),
   refreshQuotes: () => invoke<QuoteRefreshResult>("refresh_quotes"),
+  getKlineData: (code: string, kind: string, period?: KlinePeriod, limit?: number) =>
+    invoke<KlineData>("get_kline_data", { code, kind, period, limit }),
 
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),
