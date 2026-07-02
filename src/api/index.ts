@@ -21,6 +21,7 @@ import type {
   ParsedTransactionBatch,
   QuoteRefreshResult,
   Settings,
+  AppLockStatus,
   Transaction,
   TransactionFilter,
   TransferInput,
@@ -85,6 +86,14 @@ export const api = {
 
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),
+
+  getAppLockStatus: () => invoke<AppLockStatus>("get_app_lock_status"),
+  setupAppLock: (password: string) => invoke<void>("setup_app_lock", { password }),
+  verifyAppLock: (password: string) => invoke<boolean>("verify_app_lock", { password }),
+  changeAppLockPassword: (oldPassword: string, newPassword: string) =>
+    invoke<void>("change_app_lock_password", { oldPassword, newPassword }),
+  disableAppLock: (password: string) => invoke<void>("disable_app_lock", { password }),
+
   getLastSyncAt: () => invoke<string | null>("get_last_sync_at"),
 
   getDbPath: () => invoke<string>("get_db_path"),

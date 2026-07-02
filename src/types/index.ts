@@ -143,6 +143,11 @@ export interface CategoryStat {
 
 export type ThemeMode = "light" | "dark" | "system";
 
+export interface AppLockStatus {
+  enabled: boolean;
+  configured: boolean;
+}
+
 export interface Settings {
   quote_update_interval: number;
   quote_update_enabled: boolean;

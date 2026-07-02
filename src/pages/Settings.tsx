@@ -19,6 +19,7 @@ import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
 import ThemeSwitcher from "../components/theme/ThemeSwitcher";
 import SalarySettingsCard from "../components/settings/SalarySettingsCard";
+import AppLockSettingsCard from "../components/settings/AppLockSettingsCard";
 import { useTheme } from "../context/ThemeContext";
 import type { Settings } from "../types";
 
@@ -124,6 +125,10 @@ export default function SettingsPage() {
         </Form.Item>
 
         <Row gutter={[16, 16]}>
+          <Col xs={24}>
+            <AppLockSettingsCard />
+          </Col>
+
           <Col xs={24}>
             <Card className="stat-card" title="外观">
               <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>

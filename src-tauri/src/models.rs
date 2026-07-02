@@ -200,6 +200,12 @@ fn default_theme_mode() -> String {
     "system".to_string()
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppLockStatus {
+    pub enabled: bool,
+    pub configured: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct AiConfig {
     pub ai_enabled: bool,
