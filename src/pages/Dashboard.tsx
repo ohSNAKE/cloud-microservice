@@ -100,7 +100,7 @@ export default function DashboardPage() {
   if (summary.is_empty) {
     return (
       <div>
-        <PageHeader title="欢迎使用财记" subtitle="3 步开始管理你的资产与支出" />
+        <PageHeader title="欢迎使用穷鬼" subtitle="3 步开始管理你的资产与支出" />
         <Card className="stat-card">
           <EmptyPlaceholder description="还没有任何数据">
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
