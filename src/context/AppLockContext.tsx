@@ -10,6 +10,7 @@ import {
 import { Spin } from "antd";
 import { api } from "../api";
 import LockScreen from "../components/LockScreen";
+import { readManualLocked, writeManualLocked } from "../utils/appLockStorage";
 
 interface AppLockContextValue {
   lockEnabled: boolean;
@@ -53,7 +54,7 @@ export function AppLockProvider({ children }: AppLockProviderProps) {
     void (async () => {
       setChecking(true);
       const enabled = await refreshStatus();
-      if (enabled) {
+      if (enabled && readManualLocked()) {
         setLocked(true);
       }
       setChecking(false);
@@ -62,11 +63,13 @@ export function AppLockProvider({ children }: AppLockProviderProps) {
 
   const lock = useCallback(() => {
     if (lockEnabled) {
+      writeManualLocked(true);
       setLocked(true);
     }
   }, [lockEnabled]);
 
   const unlock = useCallback(() => {
+    writeManualLocked(false);
     setLocked(false);
   }, []);
 

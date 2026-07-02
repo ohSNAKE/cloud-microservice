@@ -11,6 +11,7 @@ import {
 } from "antd";
 import { LockOutlined } from "@ant-design/icons";
 import { api, formatInvokeError } from "../../api";
+import { clearManualLocked } from "../../utils/appLockStorage";
 import type { AppLockStatus } from "../../types";
 
 export default function AppLockSettingsCard() {
@@ -54,7 +55,7 @@ export default function AppLockSettingsCard() {
     }
     try {
       await api.setupAppLock(values.password);
-      message.success("应用锁已开启，下次启动需输入密码");
+      message.success("应用锁已开启");
       setSetupOpen(false);
       await loadStatus();
     } catch (e) {
@@ -81,6 +82,7 @@ export default function AppLockSettingsCard() {
     const values = await disableForm.validateFields();
     try {
       await api.disableAppLock(values.password);
+      clearManualLocked();
       message.success("应用锁已关闭");
       setDisableOpen(false);
       await loadStatus();
@@ -93,7 +95,7 @@ export default function AppLockSettingsCard() {
     <>
       <Card className="stat-card" title="应用锁" loading={loading}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-          开启后，每次打开应用需输入密码才能查看财务数据；也可点击顶栏锁图标随时锁定。密码仅保存在本机，不会上传。
+          开启后，点击顶栏锁图标可锁定应用；解锁后再次打开无需输入密码，除非再次手动锁定。密码仅保存在本机。
         </Typography.Paragraph>
         <Form layout="vertical">
           <Form.Item label="开启应用锁">
