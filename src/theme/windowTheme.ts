@@ -1,8 +1,21 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ResolvedTheme } from "./types";
 
+/** macOS 顶栏与交通灯布局参数（需与 tauri.conf.json trafficLightPosition 一致） */
+export const MAC_TITLEBAR = {
+  trafficX: 16,
+  trafficY: 20,
+  clusterWidth: 52,
+  gapAfterTraffic: 8,
+  height: 52,
+} as const;
+
 function isTauri(): boolean {
   return typeof window !== "undefined" && ("__TAURI__" in window || "__TAURI_INTERNALS__" in window);
+}
+
+function isMac(): boolean {
+  return navigator.platform.toLowerCase().includes("mac");
 }
 
 function parseColor(value: string): { red: number; green: number; blue: number; alpha: number } | null {
@@ -30,7 +43,6 @@ export async function syncNativeWindowTheme(resolved: ResolvedTheme) {
     const win = getCurrentWindow();
     await win.setTheme(resolved);
 
-    // 标题栏区域与顶栏同色
     const surface = getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim();
     const color = parseColor(surface);
     if (color) {
@@ -42,12 +54,21 @@ export async function syncNativeWindowTheme(resolved: ResolvedTheme) {
 }
 
 export function getTitlebarInset(): number {
-  if (!isTauri()) return 0;
-  return navigator.platform.toLowerCase().includes("mac") ? 24 : 0;
+  return 0;
 }
 
 export function applyTitlebarInset() {
-  const isMac = isTauri() && navigator.platform.toLowerCase().includes("mac");
-  document.documentElement.style.setProperty("--titlebar-inset", `${getTitlebarInset()}px`);
-  document.documentElement.style.setProperty("--traffic-light-offset", isMac ? "78px" : "0px");
+  const mac = isTauri() && isMac();
+  const root = document.documentElement;
+
+  if (mac) {
+    const { trafficX, clusterWidth, gapAfterTraffic, height } = MAC_TITLEBAR;
+    root.style.setProperty("--header-height", `${height}px`);
+    root.style.setProperty("--header-content-inset", `${trafficX + clusterWidth + gapAfterTraffic}px`);
+  } else {
+    root.style.setProperty("--header-height", "56px");
+    root.style.setProperty("--header-content-inset", "16px");
+  }
+
+  root.style.setProperty("--titlebar-inset", `${getTitlebarInset()}px`);
 }
