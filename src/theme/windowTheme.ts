@@ -43,7 +43,7 @@ export async function syncNativeWindowTheme(resolved: ResolvedTheme) {
 
 export function getTitlebarInset(): number {
   if (!isTauri()) return 0;
-  return navigator.platform.toLowerCase().includes("mac") ? 28 : 0;
+  return navigator.platform.toLowerCase().includes("mac") ? 24 : 0;
 }
 
 export function applyTitlebarInset() {
