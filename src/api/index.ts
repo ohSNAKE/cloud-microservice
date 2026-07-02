@@ -72,6 +72,8 @@ export const api = {
 
   listHoldings: () => invoke<Holding[]>("list_holdings"),
   addHolding: (input: NewHolding) => invoke<Holding>("add_holding", { input }),
+  lookupHoldingName: (code: string, kind: string) =>
+    invoke<string>("lookup_holding_name", { code, kind }),
   updateHolding: (id: number, quantity: number, costPrice: number) =>
     invoke<Holding>("update_holding", { id, quantity, costPrice }),
   deleteHolding: (id: number) => invoke<void>("delete_holding", { id }),

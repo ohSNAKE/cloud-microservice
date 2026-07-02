@@ -82,6 +82,7 @@ pub fn run() {
             commands::delete_recurring_rule,
             commands::list_holdings,
             commands::add_holding,
+            commands::lookup_holding_name,
             commands::update_holding,
             commands::delete_holding,
             commands::get_price_history,

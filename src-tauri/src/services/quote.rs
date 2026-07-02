@@ -48,7 +48,14 @@ pub async fn fetch_stock_price(code: &str) -> Result<f64, String> {
     Ok(price_cents / 100.0)
 }
 
-pub async fn fetch_fund_price(code: &str) -> Result<f64, String> {
+#[derive(Debug, Deserialize)]
+struct FundQuote {
+    name: Option<String>,
+    gsz: Option<String>,
+    dwjz: Option<String>,
+}
+
+async fn fetch_fund_quote(code: &str) -> Result<FundQuote, String> {
     let url = format!("https://fundgz.1234567.com.cn/js/{code}.js");
 
     let text = tokio::task::spawn_blocking(move || http_get(&url))
@@ -60,19 +67,25 @@ pub async fn fetch_fund_price(code: &str) -> Result<f64, String> {
         .trim_end_matches(");")
         .trim_end_matches(')');
 
-    #[derive(Deserialize)]
-    struct FundQuote {
-        gsz: Option<String>,
-        dwjz: Option<String>,
-    }
+    serde_json::from_str(json_part).map_err(|e| e.to_string())
+}
 
-    let quote: FundQuote = serde_json::from_str(json_part).map_err(|e| e.to_string())?;
+pub async fn fetch_fund_price(code: &str) -> Result<f64, String> {
+    let quote = fetch_fund_quote(code).await?;
     let price_str = quote
         .gsz
         .or(quote.dwjz)
         .ok_or_else(|| format!("无法获取基金 {code} 行情"))?;
 
     price_str.parse::<f64>().map_err(|e| e.to_string())
+}
+
+pub async fn lookup_fund_name(code: &str) -> Result<String, String> {
+    let quote = fetch_fund_quote(code).await?;
+    quote
+        .name
+        .filter(|n| !n.trim().is_empty())
+        .ok_or_else(|| format!("无法获取基金 {code} 名称"))
 }
 
 pub async fn lookup_stock_name(code: &str) -> Result<String, String> {

@@ -45,3 +45,13 @@ async fn live_lookup_stock_name() {
     assert!(!name.is_empty());
     println!("600519 name: {name}");
 }
+
+#[tokio::test]
+async fn live_lookup_fund_name() {
+    let name = finance_assistant_lib::services::quote::lookup_fund_name("513180")
+        .await
+        .expect("lookup fund name");
+    assert!(!name.is_empty());
+    assert!(name.contains("恒生"));
+    println!("513180 name: {name}");
+}
