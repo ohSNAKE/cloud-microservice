@@ -93,7 +93,7 @@ export default function AppLockSettingsCard() {
     <>
       <Card className="stat-card" title="应用锁" loading={loading}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-          开启后，每次打开应用需输入密码才能查看财务数据。密码仅保存在本机，不会上传。
+          开启后，每次打开应用需输入密码才能查看财务数据；也可点击顶栏锁图标随时锁定。密码仅保存在本机，不会上传。
         </Typography.Paragraph>
         <Form layout="vertical">
           <Form.Item label="开启应用锁">

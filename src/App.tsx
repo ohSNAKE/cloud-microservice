@@ -6,11 +6,11 @@ import {
   BankOutlined,
   DashboardOutlined,
   LineChartOutlined,
-  PlusOutlined,
   SettingOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Space, Typography } from "antd";
+import { Layout, Menu, Typography } from "antd";
+import AppHeaderActions from "./components/layout/AppHeaderActions";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
@@ -19,7 +19,6 @@ import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
 import WindowDragRegion, { startWindowDrag } from "./components/layout/WindowDragRegion";
-import ThemeSwitcher from "./components/theme/ThemeSwitcher";
 import { QuickAddProvider } from "./context/QuickAddContext";
 
 const { Header, Sider, Content } = Layout;
@@ -42,10 +41,6 @@ const routeMeta: Record<string, { title: string; subtitle: string }> = {
   "/settings": { title: "设置", subtitle: "AI 记账、行情与数据备份" },
 };
 
-function shortcutLabel() {
-  const isMac = navigator.platform.toLowerCase().includes("mac");
-  return isMac ? "⌘N" : "Ctrl+N";
-}
 
 function AppLayout() {
   const location = useLocation();
@@ -111,15 +106,7 @@ function AppLayout() {
               </Typography.Paragraph>
             </div>
             <div className="app-header__actions" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
-              <Space wrap>
-                <ThemeSwitcher size="small" />
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {shortcutLabel()} 智能记账
-                </Typography.Text>
-                <Button type="primary" icon={<PlusOutlined />} onClick={openQuickAdd}>
-                  智能记账
-                </Button>
-              </Space>
+              <AppHeaderActions onQuickAdd={openQuickAdd} />
             </div>
           </Header>
           <Content className="app-content">
