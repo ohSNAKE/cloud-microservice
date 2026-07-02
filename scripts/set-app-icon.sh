@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 用本地原图生成应用 Logo（需正方形源图，脚本会自动居中裁剪）
+# 用本地原图生成应用 Logo（自动居中裁剪为正方形）
 # 用法: ./scripts/set-app-icon.sh /path/to/your-image.png
 set -euo pipefail
 
@@ -12,18 +12,41 @@ if [[ -z "$SRC" || ! -f "$SRC" ]]; then
   exit 1
 fi
 
-if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "需要 ffmpeg，请先安装（macOS: brew install ffmpeg）" >&2
-  exit 1
-fi
-
 SQUARE="$ROOT/assets/.app-icon-square.png"
 OUT="$ROOT/assets/app-icon-source.png"
 
+make_square_macos() {
+  local w h side
+  w=$(sips -g pixelWidth "$SRC" 2>/dev/null | awk '/pixelWidth:/{print $2}')
+  h=$(sips -g pixelHeight "$SRC" 2>/dev/null | awk '/pixelHeight:/{print $2}')
+  if [[ -z "$w" || -z "$h" ]]; then
+    return 1
+  fi
+  if (( w < h )); then side=$w; else side=$h; fi
+  cp "$SRC" "$SQUARE"
+  # sips 从中心裁剪为正方形，再缩放到 1024
+  sips -c "$side" "$side" "$SQUARE" >/dev/null
+  sips -z 1024 1024 "$SQUARE" >/dev/null
+}
+
+make_square_ffmpeg() {
+  if ! command -v ffmpeg >/dev/null 2>&1; then
+    return 1
+  fi
+  ffmpeg -y -loglevel error -i "$SRC" \
+    -vf "crop=min(iw\,ih):min(iw\,ih):(iw-min(iw\,ih))/2:(ih-min(iw\,ih))/2,scale=1024:1024" \
+    "$SQUARE"
+}
+
 echo ">> 居中裁剪为 1024×1024 …"
-ffmpeg -y -loglevel error -i "$SRC" \
-  -vf "crop='min(iw,ih)':'min(iw,ih)','scale=1024:1024'" \
-  "$SQUARE"
+if [[ "$(uname -s)" == "Darwin" ]] && command -v sips >/dev/null 2>&1; then
+  make_square_macos || make_square_ffmpeg
+elif make_square_ffmpeg; then
+  :
+else
+  echo "需要 macOS 自带 sips 或 ffmpeg（brew install ffmpeg）" >&2
+  exit 1
+fi
 
 cp "$SQUARE" "$OUT"
 cp "$SQUARE" "$ROOT/public/app-logo.png"
