@@ -167,27 +167,27 @@ export default function DashboardPage() {
         />
       )}
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} className="dashboard-grid dashboard-grid--4">
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card" hoverable>
+          <Card className="stat-card dashboard-stat-tile" hoverable>
             <div className="label">总资产</div>
             <div className="value">{formatMoney(summary.total_assets)}</div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
+          <Card className="stat-card dashboard-stat-tile">
             <div className="label">可动用资产</div>
             <div className="value">{formatMoney(summary.liquid_assets)}</div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card" hoverable onClick={() => navigate("/holdings")}>
+          <Card className="stat-card dashboard-stat-tile" hoverable onClick={() => navigate("/holdings")}>
             <div className="label">投资市值</div>
             <div className="value">{formatMoney(summary.holding_value)}</div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
+          <Card className="stat-card dashboard-stat-tile">
             <div className="label">持仓盈亏</div>
             <div className={`value ${summary.holding_profit >= 0 ? "profit-positive" : "profit-negative"}`}>
               {formatMoney(summary.holding_profit)}
@@ -196,48 +196,56 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={8}>
-          <Card
-            className="stat-card"
-            title="本月收支"
-            extra={<Button type="link" onClick={() => navigate("/transactions")}>明细</Button>}
-          >
-            <Statistic title="收入" value={summary.month_income} precision={2} prefix="¥" valueStyle={{ color: chartColors.income }} />
-            <Statistic
-              title="支出"
-              value={summary.month_expense}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: chartColors.expense }}
-              style={{ marginTop: 16 }}
-            />
-            <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>
-              结余：<strong>{formatMoney(summary.month_balance)}</strong>
-            </Typography.Paragraph>
-          </Card>
-        </Col>
-        <Col xs={24} lg={8}>
-          <Card className="stat-card" title="资产分布">
-            <ReactECharts option={assetOption} style={{ height: 260 }} />
+      <div className="dashboard-grid dashboard-grid--3">
+        <Card
+          className="stat-card dashboard-panel"
+          title="本月收支"
+          extra={<Button type="link" onClick={() => navigate("/transactions")}>明细</Button>}
+        >
+          <div className="dashboard-panel__body">
+            <div className="dashboard-metric-pair">
+              <Statistic title="收入" value={summary.month_income} precision={2} prefix="¥" valueStyle={{ color: chartColors.income }} />
+              <Statistic title="支出" value={summary.month_expense} precision={2} prefix="¥" valueStyle={{ color: chartColors.expense }} />
+            </div>
+            <div className="dashboard-panel__footer">
+              <Typography.Text type="secondary">本月结余</Typography.Text>
+              <Typography.Text strong style={{ fontSize: 18 }}>
+                {formatMoney(summary.month_balance)}
+              </Typography.Text>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="stat-card dashboard-panel" title="资产分布">
+          <div className="dashboard-panel__body dashboard-panel__body--chart">
+            <ReactECharts className="dashboard-chart" option={assetOption} style={{ height: 168 }} />
             {summary.broker_balance > 0 && (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Typography.Text type="secondary" className="dashboard-panel__note">
                 证券账户余额 {formatMoney(summary.broker_balance)} 已排除在总资产外
               </Typography.Text>
             )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={8}>
-          <Card
-            className="stat-card"
-            title="本月概览"
-            extra={<Button type="link" onClick={() => navigate("/reports")}>报表</Button>}
-          >
-            <Statistic title="持仓数量" value={summary.holding_count} suffix="个" />
-            <Statistic title="本月记账" value={summary.transaction_count} suffix="笔" style={{ marginTop: 16 }} />
-          </Card>
-        </Col>
-      </Row>
+          </div>
+        </Card>
+
+        <Card
+          className="stat-card dashboard-panel"
+          title="本月概览"
+          extra={<Button type="link" onClick={() => navigate("/reports")}>报表</Button>}
+        >
+          <div className="dashboard-panel__body">
+            <div className="dashboard-metric-pair">
+              <Statistic title="持仓数量" value={summary.holding_count} suffix="个" />
+              <Statistic title="本月记账" value={summary.transaction_count} suffix="笔" />
+            </div>
+            <div className="dashboard-panel__footer">
+              <Typography.Text type="secondary">总资产</Typography.Text>
+              <Typography.Text strong style={{ fontSize: 18 }}>
+                {formatMoney(summary.total_assets)}
+              </Typography.Text>
+            </div>
+          </div>
+        </Card>
+      </div>
 
       <Card className="stat-card" title="近 6 个月收支趋势" style={{ marginTop: 16 }}>
         <ReactECharts option={trendOption} style={{ height: 320 }} />
