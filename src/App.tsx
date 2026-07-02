@@ -18,6 +18,7 @@ import HoldingsPage from "./pages/Holdings";
 import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
+import WindowDragRegion, { startWindowDrag } from "./components/layout/WindowDragRegion";
 import ThemeSwitcher from "./components/theme/ThemeSwitcher";
 import { QuickAddProvider } from "./context/QuickAddContext";
 
@@ -84,10 +85,10 @@ function AppLayout() {
           width={228}
           collapsedWidth={64}
         >
-          <div className="app-sider__brand">
+          <WindowDragRegion className="app-sider__brand">
             <div className="app-sider__logo">财</div>
             {!collapsed && <span className="app-sider__title">财记</span>}
-          </div>
+          </WindowDragRegion>
           <Menu
             className="app-menu"
             theme="light"
@@ -98,22 +99,28 @@ function AppLayout() {
           />
         </Sider>
         <Layout className="app-main">
-          <Header className="app-header">
-            <div className="app-header__drag" data-tauri-drag-region>
+          <Header
+            className="app-header window-drag-region"
+            data-tauri-drag-region
+            onMouseDown={startWindowDrag}
+          >
+            <div className="app-header__main">
               <Typography.Text className="app-header__title">{meta.title}</Typography.Text>
               <Typography.Paragraph className="app-header__subtitle" style={{ margin: 0 }}>
                 {meta.subtitle}
               </Typography.Paragraph>
             </div>
-            <Space wrap>
-              <ThemeSwitcher size="small" />
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {shortcutLabel()} 智能记账
-              </Typography.Text>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openQuickAdd}>
-                智能记账
-              </Button>
-            </Space>
+            <div className="app-header__actions" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
+              <Space wrap>
+                <ThemeSwitcher size="small" />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {shortcutLabel()} 智能记账
+                </Typography.Text>
+                <Button type="primary" icon={<PlusOutlined />} onClick={openQuickAdd}>
+                  智能记账
+                </Button>
+              </Space>
+            </div>
           </Header>
           <Content className="app-content">
             <div className="app-content-inner" key={refreshKey}>

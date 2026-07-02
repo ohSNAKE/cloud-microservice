@@ -38,6 +38,7 @@ body,
   gap: 10px;
   padding: calc(18px + var(--titlebar-inset)) 16px 18px;
   margin-bottom: 4px;
+  align-self: stretch;
 }
 
 [data-theme="dark"] .app-sider__brand {
@@ -95,10 +96,33 @@ body,
   z-index: 10;
 }
 
-.app-header__drag {
+.window-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+  cursor: default;
+}
+
+[data-no-drag],
+.app-header__actions,
+.app-header__actions * {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  cursor: auto;
+}
+
+.app-header__main {
   flex: 1;
   min-width: 0;
-  cursor: default;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.app-header__actions {
+  flex-shrink: 0;
 }
 
 .app-header__title {
