@@ -23,7 +23,7 @@ import {
   SwapOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { api, accountTypeLabel, formatMoney } from "../api";
+import { api, accountTypeLabel, formatInvokeError, formatMoney } from "../api";
 import PageHeader from "../components/layout/PageHeader";
 import { useQuickAdd } from "../context/QuickAddContext";
 import type {
@@ -364,7 +364,7 @@ export default function TransactionsPage() {
                         render: (_, r) => (
                           <Space>
                             <Button type="link" onClick={() => { setEditingAccount(r); accountForm.setFieldsValue(r); setAccountModal(true); }}>编辑</Button>
-                            <Popconfirm title="确认删除？" onConfirm={async () => { try { await api.deleteAccount(r.id); message.success("已删除"); loadData(); } catch (e) { message.error(String(e)); } }}>
+                            <Popconfirm title="确认删除？" onConfirm={async () => { try { await api.deleteAccount(r.id); message.success("已删除"); loadData(); } catch (e) { message.error(formatInvokeError(e)); } }}>
                               <Button type="link" danger>删除</Button>
                             </Popconfirm>
                           </Space>

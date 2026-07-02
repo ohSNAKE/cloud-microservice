@@ -8,7 +8,6 @@ import {
   Input,
   InputNumber,
   Modal,
-  Popconfirm,
   Row,
   Select,
   Space,
@@ -16,7 +15,7 @@ import {
   message,
 } from "antd";
 import { EditOutlined, LineChartOutlined, PlusOutlined } from "@ant-design/icons";
-import { api, accountTypeIcon, accountTypeLabel, formatMoney } from "../api";
+import { api, accountTypeIcon, accountTypeLabel, formatInvokeError, formatMoney } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
@@ -33,12 +32,12 @@ export default function AssetsPage() {
   const [form] = Form.useForm<NewAccount & { balance: number }>();
   const [balanceForm] = Form.useForm<{ balance: number }>();
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       setAccounts(await api.listAccounts());
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
@@ -110,13 +109,31 @@ export default function AssetsPage() {
   };
 
   const deleteAccount = async (id: number) => {
-    try {
-      await api.deleteAccount(id);
-      message.success("已删除");
-      loadData();
-    } catch (e) {
-      message.error(String(e));
-    }
+    await api.deleteAccount(id);
+    setAccounts((prev) => prev.filter((a) => a.id !== id));
+    message.success("账户已删除");
+    await loadData({ silent: true });
+  };
+
+  const confirmDeleteAccount = (account: Account) => {
+    Modal.confirm({
+      title: `删除「${account.name}」？`,
+      content:
+        "删除后不可恢复。若该账户有关联记账或已绑定工资/周期规则，将无法删除并会提示原因。",
+      okText: "删除",
+      okType: "danger",
+      cancelText: "取消",
+      centered: true,
+      getContainer: () => document.body,
+      onOk: async () => {
+        try {
+          await deleteAccount(account.id);
+        } catch (e) {
+          message.error(formatInvokeError(e));
+          throw e;
+        }
+      },
+    });
   };
 
   if (loading) {
@@ -146,11 +163,9 @@ export default function AssetsPage() {
         <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(account)}>
           编辑
         </Button>
-        <Popconfirm title="确认删除该账户？" onConfirm={() => deleteAccount(account.id)}>
-          <Button type="link" size="small" danger>
-            删除
-          </Button>
-        </Popconfirm>
+        <Button type="link" size="small" danger onClick={() => confirmDeleteAccount(account)}>
+          删除
+        </Button>
       </Space>
     </Card>
   );

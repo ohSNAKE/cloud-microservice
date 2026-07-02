@@ -64,9 +64,26 @@ pub fn delete_account(state: State<AppState>, id: i64) -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
     if tx_count > 0 {
-        return Err("该账户有关联记账记录，无法删除".to_string());
+        return Err("该账户有关联记账记录，无法删除。可先删除相关流水，或保留账户。".to_string());
     }
-    conn.execute("DELETE FROM accounts WHERE id = ?1", params![id])
+    let recurring_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM recurring_rules WHERE account_id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
         .map_err(|e| e.to_string())?;
+    if recurring_count > 0 {
+        return Err(
+            "该账户已绑定周期记账（如工资），请先在「设置 → 月薪设置」或「记账 → 周期记账」中解除后再删除。"
+                .to_string(),
+        );
+    }
+    let affected = conn
+        .execute("DELETE FROM accounts WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err("账户不存在或已被删除".to_string());
+    }
     Ok(())
 }

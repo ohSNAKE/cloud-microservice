@@ -92,6 +92,15 @@ export const api = {
   importData: (json: string) => invoke<void>("import_data", { json }),
 };
 
+export function formatInvokeError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+}
+
 export function formatMoney(value: number, currency = "CNY") {
   return new Intl.NumberFormat("zh-CN", {
     style: "currency",
