@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  App,
   Button,
   Card,
   Col,
@@ -12,7 +13,6 @@ import {
   Select,
   Space,
   Typography,
-  message,
 } from "antd";
 import { EditOutlined, LineChartOutlined, PlusOutlined } from "@ant-design/icons";
 import { api, accountTypeIcon, accountTypeLabel, formatInvokeError, formatMoney } from "../api";
@@ -24,6 +24,7 @@ import type { Account, NewAccount, UpdateAccount } from "../types";
 
 export default function AssetsPage() {
   const navigate = useNavigate();
+  const { modal, message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -116,7 +117,7 @@ export default function AssetsPage() {
   };
 
   const confirmDeleteAccount = (account: Account) => {
-    Modal.confirm({
+    modal.confirm({
       title: `删除「${account.name}」？`,
       content:
         "删除后不可恢复。若该账户有关联记账或已绑定工资/周期规则，将无法删除并会提示原因。",
@@ -124,7 +125,6 @@ export default function AssetsPage() {
       okType: "danger",
       cancelText: "取消",
       centered: true,
-      getContainer: () => document.body,
       onOk: async () => {
         try {
           await deleteAccount(account.id);
