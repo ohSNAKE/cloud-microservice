@@ -220,9 +220,9 @@ export default function AssetsPage() {
           </EmptyPlaceholder>
         </Card>
       ) : (
-        <Row gutter={[16, 16]}>
+        <Row gutter={[16, 16]} className="asset-grid">
           {personalAccounts.map((account) => (
-            <Col key={account.id} xs={24} sm={12} lg={8} xl={6}>
+            <Col key={account.id} xs={24} sm={12} lg={8} xl={6} className="asset-grid__col">
               {renderAccountCard(account)}
             </Col>
           ))}
@@ -234,9 +234,9 @@ export default function AssetsPage() {
           <Typography.Title level={5} style={{ marginTop: 24, marginBottom: 12 }}>
             证券账户
           </Typography.Title>
-          <Row gutter={[16, 16]}>
+          <Row gutter={[16, 16]} className="asset-grid">
             {brokerAccounts.map((account) => (
-              <Col key={account.id} xs={24} sm={12} lg={8} xl={6}>
+              <Col key={account.id} xs={24} sm={12} lg={8} xl={6} className="asset-grid__col">
                 {renderAccountCard(account)}
               </Col>
             ))}

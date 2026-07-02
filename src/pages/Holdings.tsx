@@ -3,13 +3,11 @@ import {
   Alert,
   Button,
   Card,
-  Col,
   Form,
   Input,
   InputNumber,
   Modal,
   Popconfirm,
-  Row,
   Select,
   Space,
   Table,
@@ -137,33 +135,32 @@ export default function HoldingsPage() {
         }
       />
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={holdings.length > 0 ? 16 : 24}>
-          <Card className="stat-card">
-            <div className="summary-strip">
-              <span className="summary-strip__item">
-                总市值：<strong>{formatMoney(totalMarketValue)}</strong>
-              </span>
-              <span className="summary-strip__item">
-                总盈亏：
-                <strong className={totalProfit >= 0 ? "profit-positive" : "profit-negative"}>
-                  {formatMoney(totalProfit)}
-                </strong>
-              </span>
-              <span className="summary-strip__item">
-                持仓数量：<strong>{holdings.length} 个</strong>
-              </span>
-            </div>
-          </Card>
-        </Col>
+      <div
+        className={holdings.length > 0 ? "content-grid content-grid--2" : undefined}
+        style={{ marginBottom: 16 }}
+      >
+        <Card className="stat-card content-grid__item">
+          <div className="summary-strip">
+            <span className="summary-strip__item">
+              总市值：<strong>{formatMoney(totalMarketValue)}</strong>
+            </span>
+            <span className="summary-strip__item">
+              总盈亏：
+              <strong className={totalProfit >= 0 ? "profit-positive" : "profit-negative"}>
+                {formatMoney(totalProfit)}
+              </strong>
+            </span>
+            <span className="summary-strip__item">
+              持仓数量：<strong>{holdings.length} 个</strong>
+            </span>
+          </div>
+        </Card>
         {holdings.length > 0 && (
-          <Col xs={24} md={8}>
-            <Card className="stat-card" title="组合占比" bodyStyle={{ padding: 8 }}>
-              <ReactECharts option={allocationOption} style={{ height: 120 }} />
-            </Card>
-          </Col>
+          <Card className="stat-card content-grid__item" title="组合占比">
+            <ReactECharts option={allocationOption} style={{ height: 120 }} />
+          </Card>
         )}
-      </Row>
+      </div>
 
       {failedCodes.length > 0 && (
         <Alert

@@ -79,12 +79,15 @@ export default function DashboardPage() {
   const assetOption = useMemo(() => {
     if (!summary) return {};
     return {
-      tooltip: { trigger: "item" },
+      tooltip: { trigger: "item", formatter: "{b}: ¥{c} ({d}%)" },
+      legend: { bottom: 0, left: "center", itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 12 } },
       color: [chartColors.primary, "#69b1ff"],
       series: [
         {
           type: "pie",
-          radius: ["42%", "70%"],
+          radius: ["46%", "72%"],
+          center: ["50%", "44%"],
+          label: { show: false },
           data: [
             { name: "可动用资产", value: summary.liquid_assets },
             { name: "投资市值", value: summary.holding_value },
@@ -93,6 +96,11 @@ export default function DashboardPage() {
       ],
     };
   }, [summary, chartColors]);
+
+  const savingsRate =
+    summary && summary.month_income > 0
+      ? Math.round((summary.month_balance / summary.month_income) * 1000) / 10
+      : null;
 
   if (loading || !summary) {
     return <PageLoader tip="加载财务数据..." />;
@@ -238,9 +246,9 @@ export default function DashboardPage() {
               <Statistic title="本月记账" value={summary.transaction_count} suffix="笔" />
             </div>
             <div className="dashboard-panel__footer">
-              <Typography.Text type="secondary">总资产</Typography.Text>
+              <Typography.Text type="secondary">储蓄率</Typography.Text>
               <Typography.Text strong style={{ fontSize: 18 }}>
-                {formatMoney(summary.total_assets)}
+                {savingsRate !== null ? `${savingsRate}%` : "—"}
               </Typography.Text>
             </div>
           </div>

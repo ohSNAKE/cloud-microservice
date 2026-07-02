@@ -408,6 +408,51 @@ body,
   width: 100%;
 }
 
+/* 通用等高网格（2/3 列） */
+.content-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.content-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.content-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 991px) {
+  .content-grid--2,
+  .content-grid--3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.content-grid__item {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-grid__item .ant-card-body {
+  flex: 1;
+}
+
+.content-grid__item .summary-strip {
+  height: 100%;
+  align-items: center;
+}
+
+.asset-grid > .asset-grid__col {
+  display: flex;
+}
+
+.asset-card {
+  flex: 1;
+  width: 100%;
+}
+
 .summary-strip {
   display: flex;
   gap: 24px;

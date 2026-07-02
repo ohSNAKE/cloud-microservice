@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
-  Col,
   DatePicker,
   Form,
   InputNumber,
   Popconfirm,
   Progress,
-  Row,
   Select,
   Table,
   Tabs,
@@ -175,9 +173,8 @@ export default function ReportsPage() {
             label: "收支分析",
             children: (
               <>
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} lg={12}>
-                    <Card className="stat-card" title="支出分类占比">
+                <div className="content-grid content-grid--2">
+                  <Card className="stat-card content-grid__item" title="支出分类占比">
                       {expenseStats.length > 0 ? (
                         <>
                           <ReactECharts option={expenseChartOption} style={{ height: 280 }} />
@@ -197,9 +194,7 @@ export default function ReportsPage() {
                         <EmptyPlaceholder description="本月暂无支出记录" />
                       )}
                     </Card>
-                  </Col>
-                  <Col xs={24} lg={12}>
-                    <Card className="stat-card" title="收入来源">
+                  <Card className="stat-card content-grid__item" title="收入来源">
                       {incomeStats.length > 0 ? (
                         <Table<CategoryStat>
                           size="small"
@@ -216,8 +211,7 @@ export default function ReportsPage() {
                         <EmptyPlaceholder description="本月暂无收入记录" />
                       )}
                     </Card>
-                  </Col>
-                </Row>
+                </div>
                 <Card className="stat-card" title="近 12 个月收支趋势" style={{ marginTop: 16 }}>
                   <ReactECharts option={trendOption} style={{ height: 360 }} />
                 </Card>
