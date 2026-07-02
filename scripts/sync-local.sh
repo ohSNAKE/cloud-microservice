@@ -12,7 +12,7 @@ cd "$ROOT"
 echo "→ 拉取分支 $BRANCH ..."
 git fetch origin "$BRANCH"
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
-git pull origin "$BRANCH"
+git pull --rebase origin "$BRANCH"
 
 echo "✓ 已同步到最新: $(git log -1 --oneline)"
 echo ""
