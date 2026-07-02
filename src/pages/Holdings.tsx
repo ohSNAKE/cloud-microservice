@@ -42,6 +42,21 @@ export default function HoldingsPage() {
   const [editing, setEditing] = useState<Holding | null>(null);
   const [addForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  const [lookingUpName, setLookingUpName] = useState(false);
+
+  const lookupName = async (code: string, type: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setLookingUpName(true);
+    try {
+      const name = await api.lookupHoldingName(trimmed, type);
+      addForm.setFieldValue("name", name);
+    } catch {
+      // 查不到名称时保持用户输入或留空，提交时后端会兜底
+    } finally {
+      setLookingUpName(false);
+    }
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -256,11 +271,16 @@ export default function HoldingsPage() {
           <Form.Item name="type" label="类型" rules={[{ required: true }]}>
             <Select options={[{ label: "股票", value: "stock" }, { label: "基金", value: "fund" }]} />
           </Form.Item>
-          <Form.Item name="code" label="代码" rules={[{ required: true }]} extra="股票如 600519，基金如 000001">
-            <Input />
+          <Form.Item name="code" label="代码" rules={[{ required: true }]} extra="股票如 600519，基金如 000001 或 513180">
+            <Input
+              onBlur={(e) => {
+                const type = addForm.getFieldValue("type") ?? "stock";
+                void lookupName(e.target.value, type);
+              }}
+            />
           </Form.Item>
           <Form.Item name="name" label="名称">
-            <Input placeholder="可选" />
+            <Input placeholder="留空将自动获取" disabled={lookingUpName} />
           </Form.Item>
           <Form.Item name="quantity" label="数量" rules={[{ required: true }]}>
             <InputNumber min={0.0001} precision={4} style={{ width: "100%" }} />

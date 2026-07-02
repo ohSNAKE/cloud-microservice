@@ -77,6 +77,8 @@ export const api = {
 
   listHoldings: () => invoke<Holding[]>("list_holdings"),
   addHolding: (input: NewHolding) => invoke<Holding>("add_holding", { input }),
+  lookupHoldingName: (code: string, kind: string) =>
+    invoke<string>("lookup_holding_name", { code, kind }),
   updateHolding: (id: number, quantity: number, costPrice: number) =>
     invoke<Holding>("update_holding", { id, quantity, costPrice }),
   deleteHolding: (id: number) => invoke<void>("delete_holding", { id }),
@@ -116,6 +118,20 @@ export function formatMoney(value: number, currency = "CNY") {
     currency,
     minimumFractionDigits: 2,
   }).format(value);
+}
+
+const PRIVACY_HIDE_AMOUNTS_KEY = "caiji-privacy-hide-amounts";
+
+export function isAmountsHidden(): boolean {
+  return localStorage.getItem(PRIVACY_HIDE_AMOUNTS_KEY) === "true";
+}
+
+export function setAmountsHidden(hidden: boolean) {
+  localStorage.setItem(PRIVACY_HIDE_AMOUNTS_KEY, hidden ? "true" : "false");
+}
+
+export function displayMoney(value: number, hidden: boolean, currency = "CNY") {
+  return hidden ? "******" : formatMoney(value, currency);
 }
 
 export function formatPercent(value: number) {
