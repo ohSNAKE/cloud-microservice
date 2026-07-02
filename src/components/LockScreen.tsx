@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Input, Typography } from "antd";
 import { LockOutlined } from "@ant-design/icons";
 import { api } from "../api";
+import AppLogo from "./AppLogo";
 
 interface LockScreenProps {
   onUnlocked: () => void;
@@ -32,7 +33,7 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
   return (
     <div className="app-lock-screen">
       <div className="app-lock-screen__card stat-card">
-        <div className="app-lock-screen__logo">财</div>
+        <AppLogo size={48} className="app-lock-screen__logo" />
         <Typography.Title level={4} style={{ marginBottom: 20 }}>
           已锁定
         </Typography.Title>

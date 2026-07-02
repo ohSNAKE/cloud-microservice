@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icon:gen": "tauri icon assets/app-icon-source.png",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

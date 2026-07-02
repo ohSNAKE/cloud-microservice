@@ -244,13 +244,8 @@ body,
   height: 48px;
   margin: 0 auto 16px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
-  color: #fff;
-  font-weight: 700;
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: cover;
+  display: block;
 }
 
 .page-header {
