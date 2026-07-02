@@ -10,20 +10,7 @@ use db::init_db;
 use services::scheduler::start_quote_scheduler;
 use std::str::FromStr;
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, WindowEvent};
-
-#[cfg(target_os = "macos")]
-const TRAFFIC_LIGHT_X: f64 = 16.0;
-#[cfg(target_os = "macos")]
-const TRAFFIC_LIGHT_Y: f64 = 20.0;
-
-#[cfg(target_os = "macos")]
-fn sync_traffic_lights(window: &tauri::WebviewWindow) {
-    let _ = window.set_traffic_light_position(tauri::LogicalPosition::new(
-        TRAFFIC_LIGHT_X,
-        TRAFFIC_LIGHT_Y,
-    ));
-}
+use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 pub struct AppState {
@@ -65,25 +52,7 @@ pub fn run() {
                 }
             });
 
-            #[cfg(target_os = "macos")]
-            if let Some(win) = app.get_webview_window("main") {
-                sync_traffic_lights(&win);
-            }
-
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            #[cfg(target_os = "macos")]
-            match event {
-                WindowEvent::Resized(_)
-                | WindowEvent::ThemeChanged(_)
-                | WindowEvent::Focused(true) => {
-                    if let Some(win) = window.get_webview_window(window.label()) {
-                        sync_traffic_lights(&win);
-                    }
-                }
-                _ => {}
-            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_accounts,
