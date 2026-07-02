@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Col, Row, Statistic, Typography, Alert } from "antd";
+import { Button, Card, Col, Row, Statistic, Tooltip, Typography, Alert } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
   LineChartOutlined,
   PlusOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
 import ReactECharts from "echarts-for-react";
-import { api, formatMoney } from "../api";
+import { api, displayMoney, formatMoney, isAmountsHidden, setAmountsHidden } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
@@ -26,6 +28,15 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>([]);
+  const [amountsHidden, setAmountsHiddenState] = useState(isAmountsHidden);
+
+  const toggleAmountsHidden = () => {
+    setAmountsHiddenState((prev) => {
+      const next = !prev;
+      setAmountsHidden(next);
+      return next;
+    });
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -126,6 +137,14 @@ export default function DashboardPage() {
         subtitle="可动用资产 + 投资市值 = 真实净资产"
         actions={
           <>
+            <Tooltip title={amountsHidden ? "显示金额" : "隐藏金额"}>
+              <Button
+                type="text"
+                icon={amountsHidden ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                onClick={toggleAmountsHidden}
+                aria-label={amountsHidden ? "显示金额" : "隐藏金额"}
+              />
+            </Tooltip>
             <Button icon={<ArrowDownOutlined />} onClick={openQuickAdd}>
               记一笔
             </Button>
@@ -167,26 +186,26 @@ export default function DashboardPage() {
         <Col xs={24} sm={12} lg={6}>
           <Card className="stat-card" hoverable>
             <div className="label">总资产</div>
-            <div className="value">{formatMoney(summary.total_assets)}</div>
+            <div className="value">{displayMoney(summary.total_assets, amountsHidden)}</div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="stat-card">
             <div className="label">可动用资产</div>
-            <div className="value">{formatMoney(summary.liquid_assets)}</div>
+            <div className="value">{displayMoney(summary.liquid_assets, amountsHidden)}</div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="stat-card" hoverable onClick={() => navigate("/holdings")}>
             <div className="label">投资市值</div>
-            <div className="value">{formatMoney(summary.holding_value)}</div>
+            <div className="value">{displayMoney(summary.holding_value, amountsHidden)}</div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="stat-card">
             <div className="label">持仓盈亏</div>
             <div className={`value ${summary.holding_profit >= 0 ? "profit-positive" : "profit-negative"}`}>
-              {formatMoney(summary.holding_profit)}
+              {displayMoney(summary.holding_profit, amountsHidden)}
             </div>
           </Card>
         </Col>

@@ -98,6 +98,20 @@ export function formatMoney(value: number, currency = "CNY") {
   }).format(value);
 }
 
+const PRIVACY_HIDE_AMOUNTS_KEY = "caiji-privacy-hide-amounts";
+
+export function isAmountsHidden(): boolean {
+  return localStorage.getItem(PRIVACY_HIDE_AMOUNTS_KEY) === "true";
+}
+
+export function setAmountsHidden(hidden: boolean) {
+  localStorage.setItem(PRIVACY_HIDE_AMOUNTS_KEY, hidden ? "true" : "false");
+}
+
+export function displayMoney(value: number, hidden: boolean, currency = "CNY") {
+  return hidden ? "******" : formatMoney(value, currency);
+}
+
 export function formatPercent(value: number) {
   const prefix = value > 0 ? "+" : "";
   return `${prefix}${value.toFixed(2)}%`;
