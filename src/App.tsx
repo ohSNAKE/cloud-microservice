@@ -9,8 +9,9 @@ import {
   SettingOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu, Typography } from "antd";
+import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "./components/layout/AppHeaderActions";
+import SidebarToggleIcon from "./components/icons/SidebarToggleIcon";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
@@ -81,11 +82,24 @@ function AppLayout() {
           width={228}
           collapsedWidth={64}
         >
-          <div
-            className="app-sider__drag-strip window-drag-region"
-            data-tauri-drag-region
-            onMouseDown={startWindowDrag}
-          />
+          <div className="app-sider__toolbar">
+            <div
+              className="app-sider__drag-strip window-drag-region"
+              data-tauri-drag-region
+              onMouseDown={startWindowDrag}
+            />
+            <Tooltip title={collapsed ? "展开菜单" : "收起菜单"} placement="right">
+              <Button
+                type="text"
+                className="app-sider__toggle"
+                icon={<SidebarToggleIcon />}
+                aria-label={collapsed ? "展开菜单" : "收起菜单"}
+                data-no-drag
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => setCollapsed(!collapsed)}
+              />
+            </Tooltip>
+          </div>
           <Menu
             className="app-menu"
             theme="light"
@@ -108,11 +122,7 @@ function AppLayout() {
               </Typography.Paragraph>
             </div>
             <div className="app-header__actions" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
-              <AppHeaderActions
-                collapsed={collapsed}
-                onToggleSidebar={() => setCollapsed(!collapsed)}
-                onQuickAdd={openQuickAdd}
-              />
+              <AppHeaderActions onQuickAdd={openQuickAdd} />
             </div>
           </Header>
           <Content className="app-content">

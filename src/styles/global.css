@@ -46,10 +46,56 @@ body,
   background: var(--color-sider) !important;
 }
 
-.app-sider__drag-strip {
-  flex-shrink: 0;
+.app-sider__toolbar {
+  display: flex;
+  align-items: center;
   height: var(--header-height);
+  flex-shrink: 0;
+  padding-right: 10px;
+}
+
+.app-sider__drag-strip {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   align-self: stretch;
+}
+
+.app-sider__toggle {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+}
+
+.app-sider__toggle:hover {
+  color: var(--color-text) !important;
+  background: var(--color-menu-hover) !important;
+}
+
+.ant-layout-sider-collapsed .app-sider__toolbar {
+  justify-content: center;
+  padding-right: 0;
+}
+
+.ant-layout-sider-collapsed .app-sider__drag-strip {
+  display: none;
+}
+
+[data-no-drag],
+.app-sider__toggle,
+.app-sider__toggle *,
+.app-header__actions,
+.app-header__actions * {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  cursor: auto;
 }
 
 .app-header {
@@ -77,14 +123,6 @@ body,
   app-region: drag;
   user-select: none;
   cursor: default;
-}
-
-[data-no-drag],
-.app-header__actions,
-.app-header__actions * {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  cursor: auto;
 }
 
 .app-header__main {
