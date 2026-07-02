@@ -82,7 +82,7 @@ function AppLayout() {
         >
           <div className="app-sider__brand">
             <div className="app-sider__logo">财</div>
-            {!collapsed && <span className="app-sider__title">财记</span>}
+            {!collapsed && <span className="app-sider__title">穷鬼</span>}
           </div>
           <Menu
             className="app-menu"

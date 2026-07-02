@@ -79,7 +79,7 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `财记备份_${new Date().toISOString().slice(0, 10)}.json`;
+      link.download = `穷鬼备份_${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
       message.success("备份已下载");
