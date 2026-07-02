@@ -16,4 +16,8 @@ git pull origin "$BRANCH"
 
 echo "✓ 已同步到最新: $(git log -1 --oneline)"
 echo ""
+echo "若要用本机原图更新 Logo:"
+echo "  ./scripts/apply-download-logo.sh    # 默认 ~/Downloads/logo.png"
+echo "  ./scripts/set-app-icon.sh /path/to/your.png"
+echo ""
 echo "启动应用: npm run tauri dev"
