@@ -20,11 +20,19 @@ body,
 .app-shell {
   height: 100vh;
   overflow: hidden;
+  flex-direction: column !important;
 }
 
-.app-shell > .ant-layout-sider {
-  height: 100vh;
+.app-body {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+}
+
+.app-body > .ant-layout-sider,
+.app-body > .app-content {
+  height: 100% !important;
+  max-height: 100%;
 }
 
 .app-shell > .ant-layout-sider .ant-layout-sider-children {
@@ -32,12 +40,9 @@ body,
   flex-direction: column;
 }
 
-.app-main {
-  height: 100vh;
-  overflow: hidden;
+.app-body > .ant-layout-sider .ant-layout-sider-children {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
 /* ── App shell ── */
@@ -46,51 +51,11 @@ body,
   background: var(--color-sider) !important;
 }
 
-.app-sider__toolbar {
-  display: flex;
-  align-items: center;
-  height: var(--header-height);
-  flex-shrink: 0;
-  padding-right: 10px;
-}
-
-.app-sider__drag-strip {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  align-self: stretch;
-}
-
-.app-sider__toggle {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  padding: 0;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-}
-
-.app-sider__toggle:hover {
-  color: var(--color-text) !important;
-  background: var(--color-menu-hover) !important;
-}
-
-.ant-layout-sider-collapsed .app-sider__toolbar {
-  justify-content: center;
-  padding-right: 0;
-}
-
-.ant-layout-sider-collapsed .app-sider__drag-strip {
-  display: none;
-}
-
 [data-no-drag],
-.app-sider__toggle,
-.app-sider__toggle *,
+.app-header__leading,
+.app-header__leading *,
+.app-header__sidebar-toggle,
+.app-header__sidebar-toggle *,
 .app-header__actions,
 .app-header__actions * {
   -webkit-app-region: no-drag;
@@ -101,21 +66,41 @@ body,
 .app-header {
   background: var(--color-surface) !important;
   border-bottom: 1px solid var(--color-border-light);
-  padding: 0 24px !important;
+  padding: 0 16px 0 calc(12px + var(--traffic-light-offset)) !important;
   height: var(--header-height) !important;
   min-height: var(--header-height) !important;
   line-height: normal !important;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
   z-index: 10;
 }
 
-/* macOS Overlay 标题栏：侧栏顶部留白避让交通灯 */
-.app-main > .app-header {
-  padding-top: 0 !important;
+.app-header__leading {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.app-header__sidebar-toggle {
+  width: 32px;
+  height: 26px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 6px;
+  background: var(--color-toolbar-btn) !important;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+}
+
+.app-header__sidebar-toggle:hover {
+  color: var(--color-text) !important;
+  background: var(--color-toolbar-btn-hover) !important;
 }
 
 .window-drag-region {
@@ -131,7 +116,7 @@ body,
   display: flex;
   flex-direction: column;
   justify-content: center;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .app-header__actions {

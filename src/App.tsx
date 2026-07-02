@@ -42,7 +42,6 @@ const routeMeta: Record<string, { title: string; subtitle: string }> = {
   "/settings": { title: "设置", subtitle: "AI 记账、行情与数据备份" },
 };
 
-
 function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -72,59 +71,52 @@ function AppLayout() {
   return (
     <QuickAddProvider openQuickAdd={openQuickAdd}>
       <Layout className="app-shell">
-        <Sider
-          className="app-sider"
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-          trigger={null}
-          theme="light"
-          width={228}
-          collapsedWidth={64}
-        >
-          <div className="app-sider__toolbar">
-            <div
-              className="app-sider__drag-strip window-drag-region"
-              data-tauri-drag-region
-              onMouseDown={startWindowDrag}
-            />
-            <Tooltip title={collapsed ? "展开菜单" : "收起菜单"} placement="right">
+        <Header className="app-header">
+          <div className="app-header__leading" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
+            <Tooltip title={collapsed ? "展开菜单" : "收起菜单"}>
               <Button
                 type="text"
-                className="app-sider__toggle"
+                className="app-header__sidebar-toggle"
                 icon={<SidebarToggleIcon />}
                 aria-label={collapsed ? "展开菜单" : "收起菜单"}
-                data-no-drag
-                onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => setCollapsed(!collapsed)}
               />
             </Tooltip>
           </div>
-          <Menu
-            className="app-menu"
-            theme="light"
-            mode="inline"
-            selectedKeys={[selectedKey]}
-            items={menuItems}
-            onClick={({ key }) => navigate(key)}
-          />
-        </Sider>
-        <Layout className="app-main">
-          <Header
-            className="app-header window-drag-region"
+          <div
+            className="app-header__main window-drag-region"
             data-tauri-drag-region
             onMouseDown={startWindowDrag}
           >
-            <div className="app-header__main">
-              <Typography.Text className="app-header__title">{meta.title}</Typography.Text>
-              <Typography.Paragraph className="app-header__subtitle" style={{ margin: 0 }}>
-                {meta.subtitle}
-              </Typography.Paragraph>
-            </div>
-            <div className="app-header__actions" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
-              <AppHeaderActions onQuickAdd={openQuickAdd} />
-            </div>
-          </Header>
+            <Typography.Text className="app-header__title">{meta.title}</Typography.Text>
+            <Typography.Paragraph className="app-header__subtitle" style={{ margin: 0 }}>
+              {meta.subtitle}
+            </Typography.Paragraph>
+          </div>
+          <div className="app-header__actions" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
+            <AppHeaderActions onQuickAdd={openQuickAdd} />
+          </div>
+        </Header>
+        <Layout className="app-body">
+          <Sider
+            className="app-sider"
+            collapsible
+            collapsed={collapsed}
+            onCollapse={setCollapsed}
+            trigger={null}
+            theme="light"
+            width={228}
+            collapsedWidth={64}
+          >
+            <Menu
+              className="app-menu"
+              theme="light"
+              mode="inline"
+              selectedKeys={[selectedKey]}
+              items={menuItems}
+              onClick={({ key }) => navigate(key)}
+            />
+          </Sider>
           <Content className="app-content">
             <div className="app-content-inner" key={refreshKey}>
               <Routes>

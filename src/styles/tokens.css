@@ -26,6 +26,9 @@
   --content-max-width: 1280px;
   --header-height: 56px;
   --titlebar-inset: 0px;
+  --traffic-light-offset: 0px;
+  --color-toolbar-btn: rgba(0, 0, 0, 0.05);
+  --color-toolbar-btn-hover: rgba(0, 0, 0, 0.08);
   --sider-width: 228px;
 }
 
@@ -52,4 +55,6 @@
   --color-profit-down: #6bcb77;
   --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.28);
   --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 28px rgba(0, 0, 0, 0.38);
+  --color-toolbar-btn: rgba(255, 255, 255, 0.08);
+  --color-toolbar-btn-hover: rgba(255, 255, 255, 0.12);
 }
