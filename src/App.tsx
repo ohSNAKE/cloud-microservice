@@ -9,8 +9,9 @@ import {
   SettingOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu, Typography } from "antd";
+import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "./components/layout/AppHeaderActions";
+import SidebarToggleIcon from "./components/icons/SidebarToggleIcon";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
@@ -76,11 +77,23 @@ function AppLayout() {
           collapsible
           collapsed={collapsed}
           onCollapse={setCollapsed}
+          trigger={null}
           theme="light"
           width={228}
           collapsedWidth={64}
         >
           <WindowDragRegion className="app-sider__brand">
+            <Tooltip title={collapsed ? "展开菜单" : "收起菜单"} placement="right">
+              <Button
+                type="text"
+                className="app-sider__toggle"
+                icon={<SidebarToggleIcon />}
+                aria-label={collapsed ? "展开菜单" : "收起菜单"}
+                data-no-drag
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => setCollapsed(!collapsed)}
+              />
+            </Tooltip>
             <div className="app-sider__logo">财</div>
             {!collapsed && <span className="app-sider__title">财记</span>}
           </WindowDragRegion>
