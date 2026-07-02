@@ -1,7 +1,8 @@
 use crate::db::{get_setting, now_local, today};
 use crate::models::{Holding, KlineData, NewHolding, PricePoint, QuoteRefreshResult};
 use crate::services::quote::{
-    fetch_fund_kline, fetch_fund_price, fetch_stock_kline, fetch_stock_price, lookup_stock_name,
+    fetch_fund_kline, fetch_fund_price, fetch_stock_kline, fetch_stock_price, lookup_fund_name,
+    lookup_stock_name,
 };
 use crate::AppState;
 use rusqlite::params;
@@ -54,13 +55,32 @@ pub fn list_holdings(state: State<AppState>) -> Result<Vec<Holding>, String> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+async fn resolve_holding_name(code: &str, kind: &str) -> String {
+    let result = if kind == "fund" {
+        lookup_fund_name(code).await
+    } else {
+        lookup_stock_name(code).await
+    };
+    result.unwrap_or_else(|_| code.to_string())
+}
+
+#[tauri::command]
+pub async fn lookup_holding_name(code: String, kind: String) -> Result<String, String> {
+    if code.trim().is_empty() {
+        return Err("代码不能为空".to_string());
+    }
+    let name = if kind == "fund" {
+        lookup_fund_name(code.trim()).await
+    } else {
+        lookup_stock_name(code.trim()).await
+    }?;
+    Ok(name)
+}
+
 #[tauri::command]
 pub async fn add_holding(state: State<'_, AppState>, mut input: NewHolding) -> Result<Holding, String> {
-    if input.name.trim().is_empty() && input.r#type == "stock" {
-        input.name = lookup_stock_name(&input.code).await.unwrap_or_else(|_| input.code.clone());
-    }
     if input.name.trim().is_empty() {
-        input.name = input.code.clone();
+        input.name = resolve_holding_name(&input.code, &input.r#type).await;
     }
 
     let market = input.market.unwrap_or_else(|| "cn".to_string());
@@ -182,13 +202,13 @@ pub async fn refresh_quotes(state: State<'_, AppState>) -> Result<QuoteRefreshRe
 }
 
 pub async fn refresh_all_quotes(state: &AppState) -> Result<QuoteRefreshResult, String> {
-    let holdings: Vec<(i64, String, String)> = {
+    let holdings: Vec<(i64, String, String, String)> = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
-            .prepare("SELECT id, code, type FROM holdings")
+            .prepare("SELECT id, code, type, name FROM holdings")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
             .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
     };
@@ -198,7 +218,19 @@ pub async fn refresh_all_quotes(state: &AppState) -> Result<QuoteRefreshResult, 
     let mut failed_codes = Vec::new();
     let recorded_at = format!("{} {}", today(), chrono::Local::now().format("%H:%M:%S"));
 
-    for (id, code, kind) in holdings {
+    for (id, code, kind, name) in holdings {
+        if name.trim().is_empty() || name == code {
+            let resolved = resolve_holding_name(&code, &kind).await;
+            if resolved != code {
+                let conn = state.db.lock().map_err(|e| e.to_string())?;
+                conn.execute(
+                    "UPDATE holdings SET name = ?1 WHERE id = ?2",
+                    params![resolved, id],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+
         let price_result = if kind == "fund" {
             fetch_fund_price(&code).await
         } else {
