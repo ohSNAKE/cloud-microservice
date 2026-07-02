@@ -32,12 +32,6 @@ body,
   flex-direction: column;
 }
 
-[data-theme="dark"] .app-sider__brand {
-  border-bottom: 1px solid var(--color-border-light);
-  margin-bottom: 8px;
-  padding-bottom: 16px;
-}
-
 .app-main {
   height: 100vh;
   overflow: hidden;
@@ -52,25 +46,10 @@ body,
   background: var(--color-sider) !important;
 }
 
-.app-sider__logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.app-sider__drag-strip {
   flex-shrink: 0;
-}
-
-.app-sider__title {
-  font-weight: 700;
-  font-size: 17px;
-  color: var(--color-text);
-  white-space: nowrap;
+  height: var(--header-height);
+  align-self: stretch;
 }
 
 .app-header {
@@ -88,7 +67,7 @@ body,
   z-index: 10;
 }
 
-/* macOS Overlay 标题栏：仅侧栏品牌区避让交通灯，右侧顶栏无需额外上内边距 */
+/* macOS Overlay 标题栏：侧栏顶部留白避让交通灯 */
 .app-main > .app-header {
   padding-top: 0 !important;
 }
@@ -100,46 +79,7 @@ body,
   cursor: default;
 }
 
-.app-sider__brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: calc(10px + var(--titlebar-inset)) 16px 14px;
-  padding-left: calc(10px + var(--traffic-light-offset));
-  margin-bottom: 4px;
-  align-self: stretch;
-  min-height: calc(var(--header-height) + var(--titlebar-inset));
-}
-
-.app-sider__toggle {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  padding: 0;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-}
-
-.app-sider__toggle:hover {
-  color: var(--color-text) !important;
-  background: var(--color-menu-hover) !important;
-}
-
-.ant-layout-sider-collapsed .app-sider__brand {
-  flex-direction: column;
-  padding: calc(8px + var(--titlebar-inset)) 0 10px;
-  padding-left: 0;
-  gap: 8px;
-  align-items: center;
-}
-
 [data-no-drag],
-.app-sider__toggle,
-.app-sider__toggle *,
 .app-header__actions,
 .app-header__actions * {
   -webkit-app-region: no-drag;

@@ -9,9 +9,8 @@ import {
   SettingOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Tooltip, Typography } from "antd";
+import { Layout, Menu, Typography } from "antd";
 import AppHeaderActions from "./components/layout/AppHeaderActions";
-import SidebarToggleIcon from "./components/icons/SidebarToggleIcon";
 import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
@@ -19,7 +18,7 @@ import HoldingsPage from "./pages/Holdings";
 import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
-import WindowDragRegion, { startWindowDrag } from "./components/layout/WindowDragRegion";
+import { startWindowDrag } from "./components/layout/WindowDragRegion";
 import { QuickAddProvider } from "./context/QuickAddContext";
 
 const { Header, Sider, Content } = Layout;
@@ -82,21 +81,11 @@ function AppLayout() {
           width={228}
           collapsedWidth={64}
         >
-          <WindowDragRegion className="app-sider__brand">
-            <Tooltip title={collapsed ? "展开菜单" : "收起菜单"} placement="right">
-              <Button
-                type="text"
-                className="app-sider__toggle"
-                icon={<SidebarToggleIcon />}
-                aria-label={collapsed ? "展开菜单" : "收起菜单"}
-                data-no-drag
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => setCollapsed(!collapsed)}
-              />
-            </Tooltip>
-            <div className="app-sider__logo">财</div>
-            {!collapsed && <span className="app-sider__title">财记</span>}
-          </WindowDragRegion>
+          <div
+            className="app-sider__drag-strip window-drag-region"
+            data-tauri-drag-region
+            onMouseDown={startWindowDrag}
+          />
           <Menu
             className="app-menu"
             theme="light"
@@ -119,7 +108,11 @@ function AppLayout() {
               </Typography.Paragraph>
             </div>
             <div className="app-header__actions" data-no-drag onMouseDown={(e) => e.stopPropagation()}>
-              <AppHeaderActions onQuickAdd={openQuickAdd} />
+              <AppHeaderActions
+                collapsed={collapsed}
+                onToggleSidebar={() => setCollapsed(!collapsed)}
+                onQuickAdd={openQuickAdd}
+              />
             </div>
           </Header>
           <Content className="app-content">

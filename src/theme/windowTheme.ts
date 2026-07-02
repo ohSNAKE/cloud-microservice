@@ -47,7 +47,5 @@ export function getTitlebarInset(): number {
 }
 
 export function applyTitlebarInset() {
-  const isMac = isTauri() && navigator.platform.toLowerCase().includes("mac");
   document.documentElement.style.setProperty("--titlebar-inset", `${getTitlebarInset()}px`);
-  document.documentElement.style.setProperty("--traffic-light-offset", isMac ? "72px" : "0px");
 }
