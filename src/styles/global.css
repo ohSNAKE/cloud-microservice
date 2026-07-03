@@ -448,6 +448,93 @@ body,
   width: 100%;
 }
 
+.holding-grid > .holding-grid__col {
+  display: flex;
+}
+
+.holding-card {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.holding-card .ant-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.holding-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.holding-card__code {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-muted-surface);
+  padding: 2px 8px;
+  border-radius: 6px;
+  line-height: 1.6;
+}
+
+.holding-card__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.holding-card__value {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.holding-card__profit {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.holding-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: 8px;
+}
+
+.holding-card__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.holding-card__stat-label {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.holding-card__time {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.holding-card__actions {
+  margin-top: auto;
+}
+
 .summary-strip {
   display: flex;
   gap: 24px;
@@ -620,32 +707,6 @@ body,
 
 .ant-table-wrapper .ant-table-thead > tr > th {
   background: var(--color-muted-surface) !important;
-}
-
-/* ── 持仓表格 ── */
-.holdings-table .ant-table-cell {
-  white-space: nowrap;
-}
-
-.holdings-table .holdings-table__name {
-  white-space: normal;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-  line-height: 1.4;
-}
-
-.holdings-table .holdings-table__profit,
-.holdings-table .holdings-table__time,
-.holdings-table .holdings-table__actions {
-  white-space: nowrap;
-}
-
-.holdings-table .holdings-table__actions .ant-space {
-  flex-wrap: nowrap;
-}
-
-.holdings-table .ant-table-content {
-  overflow-x: auto !important;
 }
 
 .ant-tabs-nav {

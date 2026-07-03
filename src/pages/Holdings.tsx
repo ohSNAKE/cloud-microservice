@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  App,
   Button,
   Card,
+  Col,
   Form,
   Input,
   InputNumber,
   Modal,
-  Popconfirm,
+  Row,
   Select,
   Space,
-  Table,
   Tag,
-  message,
+  Typography,
 } from "antd";
 import {
   DeleteOutlined,
@@ -32,6 +33,7 @@ import type { Holding } from "../types";
 
 export default function HoldingsPage() {
   const { chartColors } = useTheme();
+  const { modal, message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -52,7 +54,7 @@ export default function HoldingsPage() {
       const name = await api.lookupHoldingName(trimmed, type);
       addForm.setFieldValue("name", name);
     } catch {
-      // 查不到名称时保持用户输入或留空，提交时后端会兜底
+      /* 查不到名称时保持用户输入或留空 */
     } finally {
       setLookingUpName(false);
     }
@@ -113,6 +115,22 @@ export default function HoldingsPage() {
     loadData();
   };
 
+  const confirmDelete = (holding: Holding) => {
+    modal.confirm({
+      title: `删除「${holding.name || holding.code}」？`,
+      content: "删除后不可恢复。",
+      okText: "删除",
+      okType: "danger",
+      cancelText: "取消",
+      centered: true,
+      onOk: async () => {
+        await api.deleteHolding(holding.id);
+        message.success("已删除");
+        loadData();
+      },
+    });
+  };
+
   const totalMarketValue = holdings.reduce((sum, item) => sum + item.market_value, 0);
   const totalProfit = holdings.reduce((sum, item) => sum + item.profit, 0);
 
@@ -129,6 +147,67 @@ export default function HoldingsPage() {
       ],
     }),
     [holdings, chartColors],
+  );
+
+  const renderHoldingCard = (holding: Holding) => (
+    <Card key={holding.id} className="stat-card holding-card" hoverable>
+      <div className="holding-card__head">
+        <span className="holding-card__code">{holding.code}</span>
+        <div className="holding-card__meta">
+          <Typography.Text strong ellipsis={{ tooltip: holding.name || holding.code }}>
+            {holding.name || holding.code}
+          </Typography.Text>
+          <Tag color={holding.type === "fund" ? "blue" : "purple"} style={{ marginTop: 4 }}>
+            {holding.type === "fund" ? "基金" : "股票"}
+          </Tag>
+        </div>
+      </div>
+
+      <div className="holding-card__value">{formatMoney(holding.market_value)}</div>
+      <div className={`holding-card__profit ${holding.profit >= 0 ? "profit-positive" : "profit-negative"}`}>
+        {formatMoney(holding.profit)} · {formatPercent(holding.profit_rate)}
+      </div>
+
+      <div className="holding-card__stats">
+        <div className="holding-card__stat">
+          <span className="holding-card__stat-label">数量</span>
+          <span>{holding.quantity.toLocaleString("zh-CN")}</span>
+        </div>
+        <div className="holding-card__stat">
+          <span className="holding-card__stat-label">成本</span>
+          <span>{holding.cost_price.toFixed(3)}</span>
+        </div>
+        <div className="holding-card__stat">
+          <span className="holding-card__stat-label">现价</span>
+          <span>{holding.current_price.toFixed(3)}</span>
+        </div>
+      </div>
+
+      <Typography.Text type="secondary" className="holding-card__time">
+        更新 {holding.updated_at}
+      </Typography.Text>
+
+      <Space size={4} wrap className="holding-card__actions">
+        <Button type="link" size="small" icon={<LineChartOutlined />} onClick={() => setKlineHolding(holding)}>
+          K线
+        </Button>
+        <Button
+          type="link"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => {
+            setEditing(holding);
+            editForm.setFieldsValue({ quantity: holding.quantity, cost_price: holding.cost_price });
+            setEditOpen(true);
+          }}
+        >
+          编辑
+        </Button>
+        <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDelete(holding)}>
+          删除
+        </Button>
+      </Space>
+    </Card>
   );
 
   if (loading) {
@@ -188,126 +267,23 @@ export default function HoldingsPage() {
         />
       )}
 
-      <Card className="stat-card">
-        {holdings.length === 0 ? (
+      {holdings.length === 0 ? (
+        <Card className="stat-card">
           <EmptyPlaceholder description="暂无持仓，添加股票或基金开始追踪投资">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
               添加第一笔持仓
             </Button>
           </EmptyPlaceholder>
-        ) : (
-          <Table<Holding>
-            className="holdings-table"
-            rowKey="id"
-            dataSource={holdings}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 1180 }}
-            tableLayout="fixed"
-            columns={[
-              { title: "代码", dataIndex: "code", width: 88, fixed: "left" },
-              {
-                title: "名称",
-                dataIndex: "name",
-                width: 168,
-                ellipsis: { showTitle: true },
-                onCell: () => ({ className: "holdings-table__name" }),
-              },
-              {
-                title: "类型",
-                dataIndex: "type",
-                width: 72,
-                render: (t: string) =>
-                  t === "fund" ? <Tag color="blue">基金</Tag> : <Tag color="purple">股票</Tag>,
-              },
-              {
-                title: "数量",
-                dataIndex: "quantity",
-                width: 88,
-                align: "right",
-                render: (v: number) => v.toLocaleString("zh-CN"),
-              },
-              {
-                title: "成本",
-                dataIndex: "cost_price",
-                width: 80,
-                align: "right",
-                render: (v: number) => v.toFixed(3),
-              },
-              {
-                title: "现价",
-                dataIndex: "current_price",
-                width: 80,
-                align: "right",
-                render: (v: number) => v.toFixed(3),
-              },
-              {
-                title: "市值",
-                dataIndex: "market_value",
-                width: 112,
-                align: "right",
-                render: (v: number) => formatMoney(v),
-              },
-              {
-                title: "盈亏",
-                width: 148,
-                align: "right",
-                onCell: () => ({ className: "holdings-table__profit" }),
-                render: (_, r) => (
-                  <span className={r.profit >= 0 ? "profit-positive" : "profit-negative"}>
-                    {formatMoney(r.profit)} ({formatPercent(r.profit_rate)})
-                  </span>
-                ),
-              },
-              {
-                title: "更新",
-                dataIndex: "updated_at",
-                width: 152,
-                onCell: () => ({ className: "holdings-table__time" }),
-              },
-              {
-                title: "操作",
-                width: 168,
-                fixed: "right",
-                onCell: () => ({ className: "holdings-table__actions" }),
-                render: (_, r) => (
-                  <Space>
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<LineChartOutlined />}
-                      onClick={() => setKlineHolding(r)}
-                    >
-                      K线
-                    </Button>
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={() => {
-                        setEditing(r);
-                        editForm.setFieldsValue({ quantity: r.quantity, cost_price: r.cost_price });
-                        setEditOpen(true);
-                      }}
-                    >
-                      编辑
-                    </Button>
-                    <Popconfirm
-                      title="确认删除？"
-                      onConfirm={async () => {
-                        await api.deleteHolding(r.id);
-                        message.success("已删除");
-                        loadData();
-                      }}
-                    >
-                      <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-                    </Popconfirm>
-                  </Space>
-                ),
-              },
-            ]}
-          />
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <Row gutter={[16, 16]} className="holding-grid">
+          {holdings.map((holding) => (
+            <Col key={holding.id} xs={24} sm={12} lg={8} xl={6} className="holding-grid__col">
+              {renderHoldingCard(holding)}
+            </Col>
+          ))}
+        </Row>
+      )}
 
       <Modal title="添加持仓" open={addOpen} onCancel={() => setAddOpen(false)} onOk={handleAdd} destroyOnClose>
         <Form form={addForm} layout="vertical" initialValues={{ type: "stock", quantity: 100, cost_price: 10 }}>
