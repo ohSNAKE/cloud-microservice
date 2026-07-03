@@ -197,35 +197,78 @@ export default function HoldingsPage() {
           </EmptyPlaceholder>
         ) : (
           <Table<Holding>
+            className="holdings-table"
             rowKey="id"
             dataSource={holdings}
             pagination={{ pageSize: 10 }}
+            scroll={{ x: 1180 }}
+            tableLayout="fixed"
             columns={[
-              { title: "代码", dataIndex: "code", width: 90 },
-              { title: "名称", dataIndex: "name" },
+              { title: "代码", dataIndex: "code", width: 88, fixed: "left" },
+              {
+                title: "名称",
+                dataIndex: "name",
+                width: 168,
+                ellipsis: { showTitle: true },
+                onCell: () => ({ className: "holdings-table__name" }),
+              },
               {
                 title: "类型",
                 dataIndex: "type",
-                width: 80,
+                width: 72,
                 render: (t: string) =>
                   t === "fund" ? <Tag color="blue">基金</Tag> : <Tag color="purple">股票</Tag>,
               },
-              { title: "数量", dataIndex: "quantity" },
-              { title: "成本", dataIndex: "cost_price", render: (v: number) => v.toFixed(3) },
-              { title: "现价", dataIndex: "current_price", render: (v: number) => v.toFixed(3) },
-              { title: "市值", dataIndex: "market_value", render: (v: number) => formatMoney(v) },
+              {
+                title: "数量",
+                dataIndex: "quantity",
+                width: 88,
+                align: "right",
+                render: (v: number) => v.toLocaleString("zh-CN"),
+              },
+              {
+                title: "成本",
+                dataIndex: "cost_price",
+                width: 80,
+                align: "right",
+                render: (v: number) => v.toFixed(3),
+              },
+              {
+                title: "现价",
+                dataIndex: "current_price",
+                width: 80,
+                align: "right",
+                render: (v: number) => v.toFixed(3),
+              },
+              {
+                title: "市值",
+                dataIndex: "market_value",
+                width: 112,
+                align: "right",
+                render: (v: number) => formatMoney(v),
+              },
               {
                 title: "盈亏",
+                width: 148,
+                align: "right",
+                onCell: () => ({ className: "holdings-table__profit" }),
                 render: (_, r) => (
                   <span className={r.profit >= 0 ? "profit-positive" : "profit-negative"}>
                     {formatMoney(r.profit)} ({formatPercent(r.profit_rate)})
                   </span>
                 ),
               },
-              { title: "更新", dataIndex: "updated_at", width: 160 },
+              {
+                title: "更新",
+                dataIndex: "updated_at",
+                width: 152,
+                onCell: () => ({ className: "holdings-table__time" }),
+              },
               {
                 title: "操作",
-                width: 140,
+                width: 168,
+                fixed: "right",
+                onCell: () => ({ className: "holdings-table__actions" }),
                 render: (_, r) => (
                   <Space>
                     <Button

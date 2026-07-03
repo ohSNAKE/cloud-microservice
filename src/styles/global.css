@@ -160,7 +160,7 @@ body,
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   padding: 20px 24px 32px !important;
   max-width: var(--content-max-width);
   background: var(--color-bg);
@@ -620,6 +620,32 @@ body,
 
 .ant-table-wrapper .ant-table-thead > tr > th {
   background: var(--color-muted-surface) !important;
+}
+
+/* ── 持仓表格 ── */
+.holdings-table .ant-table-cell {
+  white-space: nowrap;
+}
+
+.holdings-table .holdings-table__name {
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.holdings-table .holdings-table__profit,
+.holdings-table .holdings-table__time,
+.holdings-table .holdings-table__actions {
+  white-space: nowrap;
+}
+
+.holdings-table .holdings-table__actions .ant-space {
+  flex-wrap: nowrap;
+}
+
+.holdings-table .ant-table-content {
+  overflow-x: auto !important;
 }
 
 .ant-tabs-nav {
