@@ -20,7 +20,7 @@ fn setup_test_db() -> Connection {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL,
-            icon TEXT DEFAULT '📌'
+            icon TEXT DEFAULT 'pushpin'
         );
 
         CREATE TABLE transactions (
@@ -71,12 +71,12 @@ fn setup_test_db() -> Connection {
     )
     .unwrap();
     conn.execute(
-        "INSERT INTO categories (name, type, icon) VALUES ('餐饮', 'expense', '🍜')",
+        "INSERT INTO categories (name, type, icon) VALUES ('餐饮', 'expense', 'dining')",
         [],
     )
     .unwrap();
     conn.execute(
-        "INSERT INTO categories (name, type, icon) VALUES ('工资', 'income', '💰')",
+        "INSERT INTO categories (name, type, icon) VALUES ('工资', 'income', 'salary')",
         [],
     )
     .unwrap();

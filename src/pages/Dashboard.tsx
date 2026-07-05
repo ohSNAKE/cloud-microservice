@@ -12,6 +12,7 @@ import {
   WalletOutlined,
 } from "@ant-design/icons";
 import ReactECharts from "echarts-for-react";
+import { CategoryLabel } from "../components/icons/iconRegistry";
 import { api, displayMoney, formatMoney, isAmountsHidden, setAmountsHidden } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
@@ -180,8 +181,7 @@ export default function DashboardPage() {
             <ul style={{ margin: 0, paddingLeft: 20 }}>
               {budgetAlerts.map((a) => (
                 <li key={a.category_name}>
-                  {a.category_icon} {a.category_name}：已用 {formatMoney(a.spent)} / 预算{" "}
-                  {formatMoney(a.budget)}，超出 {formatMoney(a.over_amount)}
+                  <CategoryLabel icon={a.category_icon} name={`${a.category_name}：已用 ${formatMoney(a.spent)} / 预算 ${formatMoney(a.budget)}，超出 ${formatMoney(a.over_amount)}`} />
                 </li>
               ))}
             </ul>

@@ -14,6 +14,7 @@ import {
 } from "antd";
 import ReactECharts from "echarts-for-react";
 import dayjs from "dayjs";
+import { CategoryLabel, categorySelectOption } from "../components/icons/iconRegistry";
 import { api, formatMoney } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
@@ -69,7 +70,7 @@ export default function ReportsPage() {
           type: "pie",
           radius: "65%",
           data: expenseStats.map((s) => ({
-            name: `${s.category_icon} ${s.category_name}`,
+            name: s.category_name,
             value: s.amount,
           })),
         },
@@ -184,7 +185,7 @@ export default function ReportsPage() {
                             pagination={false}
                             dataSource={expenseStats}
                             columns={[
-                              { title: "分类", render: (_, r) => `${r.category_icon} ${r.category_name}` },
+                              { title: "分类", render: (_, r) => <CategoryLabel icon={r.category_icon} name={r.category_name} /> },
                               { title: "金额", dataIndex: "amount", render: (v: number) => formatMoney(v) },
                               { title: "占比", dataIndex: "percentage", render: (v: number) => `${v.toFixed(1)}%` },
                             ]}
@@ -202,7 +203,7 @@ export default function ReportsPage() {
                           pagination={false}
                           dataSource={incomeStats}
                           columns={[
-                            { title: "分类", render: (_, r) => `${r.category_icon} ${r.category_name}` },
+                            { title: "分类", render: (_, r) => <CategoryLabel icon={r.category_icon} name={r.category_name} /> },
                             { title: "金额", dataIndex: "amount", render: (v: number) => formatMoney(v) },
                             { title: "占比", dataIndex: "percentage", render: (v: number) => `${v.toFixed(1)}%` },
                           ]}
@@ -228,7 +229,7 @@ export default function ReportsPage() {
                     <Select
                       placeholder="支出分类"
                       style={{ width: 160 }}
-                      options={categories.map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
+                      options={categories.map(categorySelectOption)}
                     />
                   </Form.Item>
                   <Form.Item name="amount" rules={[{ required: true, message: "输入预算" }]}>
@@ -244,7 +245,7 @@ export default function ReportsPage() {
                   style={{ marginTop: 16 }}
                   locale={{ emptyText: "本月尚未设置预算" }}
                   columns={[
-                    { title: "分类", render: (_, r) => `${r.category_icon} ${r.category_name}` },
+                    { title: "分类", render: (_, r) => <CategoryLabel icon={r.category_icon} name={r.category_name} /> },
                     { title: "预算", dataIndex: "amount", render: (v: number) => formatMoney(v) },
                     { title: "已用", dataIndex: "spent", render: (v: number) => formatMoney(v) },
                     {

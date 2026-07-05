@@ -22,6 +22,7 @@ import {
 } from "antd";
 import { LoadingOutlined, DeleteOutlined, RobotOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { categorySelectOption } from "./icons/iconRegistry";
 import { api } from "../api";
 import type { Account, Category, ParsedTransactionDraft } from "../types";
 
@@ -123,7 +124,7 @@ function DraftItemEditor({
             onChange={(category_id) => onChange({ category_id })}
             options={categories
               .filter((c) => c.type === item.type)
-              .map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
+              .map(categorySelectOption)}
           />
         </Col>
         <Col span={12}>
@@ -414,7 +415,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
                   <Select
                     options={categories
                       .filter((c) => c.type === txType)
-                      .map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
+                      .map(categorySelectOption)}
                   />
                 </Form.Item>
                 <Form.Item name="account_id" label="账户" rules={[{ required: true }]}>

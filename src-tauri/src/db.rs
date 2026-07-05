@@ -29,7 +29,7 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL,
-            icon TEXT DEFAULT '📌'
+            icon TEXT DEFAULT 'pushpin'
         );
 
         CREATE TABLE IF NOT EXISTS transactions (
@@ -182,18 +182,18 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))?;
     if category_count == 0 {
         let categories = [
-            ("餐饮", "expense", "🍜"),
-            ("交通", "expense", "🚗"),
-            ("购物", "expense", "🛒"),
-            ("住房", "expense", "🏠"),
-            ("娱乐", "expense", "🎮"),
-            ("医疗", "expense", "💊"),
-            ("教育", "expense", "📚"),
-            ("其他支出", "expense", "📌"),
-            ("工资", "income", "💰"),
-            ("奖金", "income", "🎁"),
-            ("理财收益", "income", "📈"),
-            ("其他收入", "income", "💵"),
+            ("餐饮", "expense", "dining"),
+            ("交通", "expense", "transport"),
+            ("购物", "expense", "shopping"),
+            ("住房", "expense", "housing"),
+            ("娱乐", "expense", "entertainment"),
+            ("医疗", "expense", "medical"),
+            ("教育", "expense", "education"),
+            ("其他支出", "expense", "pushpin"),
+            ("工资", "income", "salary"),
+            ("奖金", "income", "gift"),
+            ("理财收益", "income", "investment"),
+            ("其他收入", "income", "cash-income"),
         ];
         for (name, kind, icon) in categories {
             conn.execute(

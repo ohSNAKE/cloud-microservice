@@ -272,9 +272,9 @@ export interface PortfolioHistoryPoint {
 }
 
 export const ACCOUNT_TYPES = [
-  { label: "现金", value: "cash", icon: "💵" },
-  { label: "银行卡", value: "bank", icon: "🏦" },
-  { label: "支付宝", value: "alipay", icon: "💙" },
-  { label: "微信", value: "wechat", icon: "💚" },
-  { label: "证券账户", value: "broker", icon: "📈" },
+  { label: "现金", value: "cash", icon: "cash" },
+  { label: "银行卡", value: "bank", icon: "bank" },
+  { label: "支付宝", value: "alipay", icon: "alipay" },
+  { label: "微信", value: "wechat", icon: "wechat" },
+  { label: "证券账户", value: "broker", icon: "broker" },
 ] as const;
