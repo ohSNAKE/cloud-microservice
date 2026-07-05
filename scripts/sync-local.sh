@@ -11,26 +11,28 @@ cd "$ROOT"
 
 echo "→ 拉取分支 $BRANCH ..."
 
-# 本地 icon 生成物常与远程冲突，默认丢弃后同步（需要时可重新 npm run icon:brand）
-ICON_PATHS=(
-  src-tauri/icons
-  assets/app-icon-source.png
-  public/app-logo.png
-)
-if git status --porcelain -- "${ICON_PATHS[@]}" | grep -q .; then
-  echo ">> 检测到本地图标改动，将恢复为当前 HEAD 版本后再 pull"
-  git restore --source=HEAD --staged --worktree -- "${ICON_PATHS[@]}" 2>/dev/null || \
-    git checkout HEAD -- "${ICON_PATHS[@]}"
+# icon 生成物不再入库；丢弃本地改动以免 pull 被阻挡
+ICON_DIR="src-tauri/icons"
+if git status --porcelain -- "$ICON_DIR" 2>/dev/null | grep -q .; then
+  echo ">> 丢弃 src-tauri/icons 本地改动 …"
+  git restore --source=HEAD --staged --worktree -- "$ICON_DIR" 2>/dev/null || \
+    git checkout HEAD -- "$ICON_DIR" 2>/dev/null || true
 fi
+rm -rf "$ICON_DIR"/*
+mkdir -p "$ICON_DIR"
+touch "$ICON_DIR/.gitkeep"
 
 git fetch origin "$BRANCH"
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
 git pull --rebase origin "$BRANCH"
 
+echo ">> 生成本地 Tauri 图标 …"
+npm run icon:gen
+
 echo "✓ 已同步到最新: $(git log -1 --oneline)"
 echo ""
-echo "若要用本机原图更新 Logo:"
-echo "  npm run icon:brand                    # 使用仓库内置品牌图标"
-echo "  ./scripts/apply-download-logo.sh    # 默认 ~/Downloads/logo.png"
+echo "自定义 Logo:"
+echo "  npm run icon:brand"
+echo "  ./scripts/apply-download-logo.sh"
 echo ""
-echo "启动应用: npm run tauri dev"
+echo "启动: npm run tauri dev"
