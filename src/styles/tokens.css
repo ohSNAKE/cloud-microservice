@@ -30,8 +30,9 @@
   --color-toolbar-btn: rgba(0, 0, 0, 0.05);
   --color-toolbar-btn-hover: rgba(0, 0, 0, 0.08);
   --color-lock-glass: rgba(255, 255, 255, 0.55);
-  --color-lock-panel: rgba(255, 255, 255, 0.72);
-  --color-lock-panel-border: rgba(255, 255, 255, 0.85);
+  --color-lock-input-bg: rgba(255, 255, 255, 0.45);
+  --color-lock-input-bg-hover: rgba(255, 255, 255, 0.58);
+  --color-lock-input-border: rgba(255, 255, 255, 0.65);
   --color-lock-blob-a: rgba(22, 119, 255, 0.18);
   --color-lock-blob-b: rgba(56, 158, 13, 0.12);
   --sider-width: 228px;
@@ -63,8 +64,9 @@
   --color-toolbar-btn: rgba(255, 255, 255, 0.08);
   --color-toolbar-btn-hover: rgba(255, 255, 255, 0.12);
   --color-lock-glass: rgba(12, 14, 18, 0.62);
-  --color-lock-panel: rgba(23, 26, 33, 0.72);
-  --color-lock-panel-border: rgba(255, 255, 255, 0.12);
+  --color-lock-input-bg: rgba(255, 255, 255, 0.08);
+  --color-lock-input-bg-hover: rgba(255, 255, 255, 0.12);
+  --color-lock-input-border: rgba(255, 255, 255, 0.14);
   --color-lock-blob-a: rgba(106, 171, 255, 0.22);
   --color-lock-blob-b: rgba(107, 203, 119, 0.1);
 }

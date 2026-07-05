@@ -251,59 +251,41 @@ body,
   background: var(--color-lock-glass);
 }
 
-.app-lock-screen__panel {
+.app-lock-screen__content {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 380px;
-  padding: 36px 32px 32px;
-  text-align: center;
-  border-radius: 20px;
-  border: 1px solid var(--color-lock-panel-border);
-  background: var(--color-lock-panel);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow: var(--shadow-md);
+  max-width: 320px;
 }
 
-.app-lock-screen__logo {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 20px;
-  border-radius: 14px;
-  object-fit: cover;
-  display: block;
-  box-shadow: var(--shadow-sm);
+.app-lock-screen__input.ant-input-affix-wrapper {
+  background: var(--color-lock-input-bg) !important;
+  border-color: var(--color-lock-input-border) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-.app-lock-screen__title {
-  margin: 0 0 8px !important;
-  font-weight: 600 !important;
+.app-lock-screen__input.ant-input-affix-wrapper:hover,
+.app-lock-screen__input.ant-input-affix-wrapper-focused {
+  background: var(--color-lock-input-bg-hover) !important;
+  border-color: var(--color-primary) !important;
 }
 
-.app-lock-screen__hint {
-  display: block;
-  margin-bottom: 24px;
-  font-size: 13px;
+.app-lock-screen__input--shake {
+  animation: app-lock-shake 0.45s ease;
 }
 
-.app-lock-screen__input {
-  text-align: left;
-}
-
-.app-lock-screen__error {
-  display: block;
-  margin-top: 12px;
-  font-size: 13px;
-}
-
-.app-lock-screen--loading .app-lock-screen__panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 180px;
-  padding: 48px 32px;
+@keyframes app-lock-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
 }
 
 .page-header {
