@@ -2,12 +2,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ResolvedTheme } from "./types";
 
 /** macOS 顶栏与交通灯布局参数（需与 tauri.conf.json trafficLightPosition 一致） */
+export const MAC_TITLEBAR_HEIGHT = 52;
+
 export const MAC_TITLEBAR = {
   trafficX: 16,
-  trafficY: 20,
+  /** Tauri 的 y 为交通灯簇中心，与顶栏垂直居中 */
+  trafficY: MAC_TITLEBAR_HEIGHT / 2,
   clusterWidth: 52,
   gapAfterTraffic: 8,
-  height: 52,
+  height: MAC_TITLEBAR_HEIGHT,
 } as const;
 
 function isTauri(): boolean {
