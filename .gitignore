@@ -1,0 +1,14 @@
+node_modules/
+dist/
+src-tauri/target/
+release/
+*.local
+.DS_Store
+*.db
+*.log
+.env
+scripts/setup-ai-config.local.sql
+
+# Tauri 图标由 assets/app-icon-source.png 本地生成，勿提交（避免 pull 冲突）
+src-tauri/icons/**
+!src-tauri/icons/.gitkeep
