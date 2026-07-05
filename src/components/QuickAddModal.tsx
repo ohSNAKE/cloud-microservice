@@ -300,7 +300,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
       onOk={activeTab === "form" ? handleFormOk : undefined}
       okText={activeTab === "form" ? "保存" : undefined}
       footer={activeTab === "smart" ? smartFooter : activeTab === "form" ? undefined : null}
-      destroyOnClose
+      forceRender
       width={activeTab === "smart" ? 920 : 480}
     >
       <Tabs
@@ -322,12 +322,13 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
                       支持多条描述，用分号或「还有」分隔
                     </Typography.Text>
                     <Input.TextArea
+                      id="quick-add-nl-input"
+                      name="quick-add-nl"
                       value={nlText}
                       onChange={(e) => setNlText(e.target.value)}
                       placeholder="例如：微信买了报纸；支付宝花了三块钱面包"
                       autoSize={{ minRows: 10, maxRows: 14 }}
                       disabled={parsing}
-                      autoFocus
                     />
                     <Button
                       type="primary"
@@ -423,7 +424,7 @@ export default function QuickAddModal({ open, onClose, onSuccess }: QuickAddModa
                   <DatePicker style={{ width: "100%" }} />
                 </Form.Item>
                 <Form.Item name="note" label="备注">
-                  <Input placeholder="可选" />
+                  <Input id="quick-add-note" name="note" placeholder="可选" />
                 </Form.Item>
               </Form>
             ),
