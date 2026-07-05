@@ -28,7 +28,7 @@ mkdir -p "$ICON_DIR"
 touch "$ICON_DIR/.gitkeep"
 
 echo ">> 生成本地 Tauri 图标 …"
-npm run icon:gen
+bash scripts/ensure-icons.sh
 
 echo "✓ 已同步: $(git log -1 --oneline)"
 echo ""

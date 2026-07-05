@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.finance.assistant",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "bash scripts/ensure-icons.sh && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "bash scripts/ensure-icons.sh && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
