@@ -668,19 +668,19 @@ mod tests {
                 id: 1,
                 name: "餐饮".to_string(),
                 r#type: "expense".to_string(),
-                icon: "🍜".to_string(),
+                icon: "dining".to_string(),
             },
             Category {
                 id: 2,
                 name: "交通".to_string(),
                 r#type: "expense".to_string(),
-                icon: "🚗".to_string(),
+                icon: "transport".to_string(),
             },
             Category {
                 id: 3,
                 name: "工资".to_string(),
                 r#type: "income".to_string(),
-                icon: "💰".to_string(),
+                icon: "salary".to_string(),
             },
         ]
     }

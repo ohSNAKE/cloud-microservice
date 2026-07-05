@@ -38,6 +38,14 @@ import type {
   UpdateCategory,
   UpdateTransaction,
 } from "../types";
+import {
+  CategoryIcon,
+  CategoryLabel,
+  DEFAULT_CATEGORY_ICON,
+  accountTypeSelectOption,
+  categorySelectOption,
+} from "../components/icons/iconRegistry";
+import IconPicker from "../components/icons/IconPicker";
 import { ACCOUNT_TYPES } from "../types";
 
 type TxFormMode = "expense" | "income" | "transfer" | "edit";
@@ -273,7 +281,7 @@ export default function TransactionsPage() {
             style={{ width: 120 }}
             value={categoryFilter}
             onChange={setCategoryFilter}
-            options={categories.map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))}
+            options={categories.map(categorySelectOption)}
           />
           <Input.Search placeholder="搜索备注" allowClear onSearch={setKeyword} style={{ width: 160 }} />
         </div>
@@ -306,7 +314,7 @@ export default function TransactionsPage() {
                       render: (_, r) =>
                         r.type === "transfer"
                           ? `${r.account_name} → ${r.transfer_to_account_name}`
-                          : `${r.category_icon ?? ""} ${r.category_name ?? "-"}`,
+                          : <CategoryLabel icon={r.category_icon} name={r.category_name ?? "-"} />,
                     },
                     { title: "账户", dataIndex: "account_name", render: (v) => v ?? "-" },
                     {
@@ -380,7 +388,7 @@ export default function TransactionsPage() {
               label: "分类管理",
               children: (
                 <>
-                  <Button type="primary" style={{ marginBottom: 12 }} onClick={() => { setEditingCategory(null); categoryForm.resetFields(); categoryForm.setFieldsValue({ type: "expense", icon: "📌" }); setCategoryModal(true); }}>
+                  <Button type="primary" style={{ marginBottom: 12 }} onClick={() => { setEditingCategory(null); categoryForm.resetFields(); categoryForm.setFieldsValue({ type: "expense", icon: DEFAULT_CATEGORY_ICON }); setCategoryModal(true); }}>
                     添加分类
                   </Button>
                   <Table
@@ -388,7 +396,7 @@ export default function TransactionsPage() {
                     dataSource={categories}
                     pagination={false}
                     columns={[
-                      { title: "图标", dataIndex: "icon", width: 60 },
+                      { title: "图标", dataIndex: "icon", width: 60, render: (icon: string) => <CategoryIcon icon={icon} /> },
                       { title: "名称", dataIndex: "name" },
                       { title: "类型", dataIndex: "type", render: (t: string) => (t === "income" ? "收入" : "支出") },
                       {
@@ -423,7 +431,7 @@ export default function TransactionsPage() {
                     columns={[
                       { title: "类型", dataIndex: "type", render: (t: string) => (t === "income" ? "收入" : "支出") },
                       { title: "金额", dataIndex: "amount", render: (v: number) => formatMoney(v) },
-                      { title: "分类", render: (_, r) => `${r.category_icon ?? ""} ${r.category_name ?? "-"}` },
+                      { title: "分类", render: (_, r) => <CategoryLabel icon={r.category_icon} name={r.category_name ?? "-"} /> },
                       { title: "账户", dataIndex: "account_name", render: (v) => v ?? "-" },
                       { title: "每月", dataIndex: "day_of_month", render: (d: number) => `${d} 日` },
                       { title: "上次执行", dataIndex: "last_run_month", render: (v) => v ?? "未执行" },
@@ -493,7 +501,7 @@ export default function TransactionsPage() {
                 <InputNumber min={0.01} precision={2} style={{ width: "100%" }} prefix="¥" />
               </Form.Item>
               <Form.Item name="category_id" label="分类" rules={[{ required: true }]}>
-                <Select options={categories.filter((c) => c.type === (txType ?? "expense")).map((c) => ({ label: `${c.icon} ${c.name}`, value: c.id }))} />
+                <Select options={categories.filter((c) => c.type === (txType ?? "expense")).map(categorySelectOption)} />
               </Form.Item>
               <Form.Item name="account_id" label="账户" rules={[{ required: true }]}>
                 <Select options={accounts.map((a) => ({ label: a.name, value: a.id }))} />
@@ -511,7 +519,7 @@ export default function TransactionsPage() {
         <Form form={accountForm} layout="vertical">
           <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-            <Select options={ACCOUNT_TYPES.map((t) => ({ label: `${t.icon} ${t.label}`, value: t.value }))} />
+            <Select options={ACCOUNT_TYPES.map((t) => accountTypeSelectOption(t))} />
           </Form.Item>
           <Form.Item name="balance" label="当前余额" rules={[{ required: true }]}>
             <InputNumber min={0} precision={2} style={{ width: "100%" }} prefix="¥" />
@@ -525,7 +533,13 @@ export default function TransactionsPage() {
           <Form.Item name="type" label="类型" rules={[{ required: true }]}>
             <Select options={[{ label: "支出", value: "expense" }, { label: "收入", value: "income" }]} disabled={!!editingCategory} />
           </Form.Item>
-          <Form.Item name="icon" label="图标"><Input placeholder="如 🍜" /></Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.type !== cur.type}>
+            {({ getFieldValue }) => (
+              <Form.Item name="icon" label="图标">
+                <IconPicker type={getFieldValue("type") ?? "expense"} />
+              </Form.Item>
+            )}
+          </Form.Item>
         </Form>
       </Modal>
 

@@ -6,7 +6,7 @@ use tauri::State;
 #[tauri::command]
 pub fn add_category(state: State<AppState>, input: NewCategory) -> Result<Category, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    let icon = input.icon.unwrap_or_else(|| "📌".to_string());
+    let icon = input.icon.unwrap_or_else(|| "pushpin".to_string());
     conn.execute(
         "INSERT INTO categories (name, type, icon) VALUES (?1, ?2, ?3)",
         params![input.name, input.r#type, icon],

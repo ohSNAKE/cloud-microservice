@@ -152,7 +152,7 @@ export function accountTypeLabel(type: string) {
   return map[type] ?? type;
 }
 
-export function accountTypeIcon(type: string) {
+export function accountTypeIconKey(type: string) {
   const found = ACCOUNT_TYPES.find((t) => t.value === type);
-  return found?.icon ?? "💰";
+  return found?.icon ?? "cash";
 }

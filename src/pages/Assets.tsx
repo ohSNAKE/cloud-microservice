@@ -22,7 +22,8 @@ import {
   PlusOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { api, accountTypeIcon, accountTypeLabel, formatInvokeError, formatMoney } from "../api";
+import { api, accountTypeLabel, formatInvokeError, formatMoney } from "../api";
+import { AccountTypeLabel, accountTypeSelectOption } from "../components/icons/iconRegistry";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
@@ -180,7 +181,7 @@ export default function AssetsPage() {
           </Tag>
         </div>
         <span className="asset-card__subtitle">
-          {accountTypeIcon(account.type)} {accountTypeLabel(account.type)}
+          <AccountTypeLabel type={account.type} label={accountTypeLabel(account.type)} />
         </span>
       </div>
 
@@ -331,7 +332,7 @@ export default function AssetsPage() {
             <Input placeholder="如：工资卡、支付宝" />
           </Form.Item>
           <Form.Item name="type" label="账户类型" rules={[{ required: true }]}>
-            <Select options={ACCOUNT_TYPES.map((t) => ({ label: `${t.icon} ${t.label}`, value: t.value }))} />
+            <Select options={ACCOUNT_TYPES.map((t) => accountTypeSelectOption(t))} />
           </Form.Item>
           <Form.Item
             name="balance"
