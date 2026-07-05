@@ -13,8 +13,24 @@ from PIL import Image
 
 CANVAS = 1024
 CONTENT = 832
-# Opaque pad color (matches brand icon top blue)
-PAD_RGB = (59, 130, 246)
+
+
+def sample_pad_color(image: Image.Image) -> tuple[int, int, int]:
+    """Use the image's own edge colors for padding — never a hard-coded brand color."""
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    strip = max(1, min(width, height) // 64)
+    pixels: list[tuple[int, int, int]] = []
+    for y in range(height):
+        for x in range(width):
+            if x < strip or x >= width - strip or y < strip or y >= height - strip:
+                red, green, blue, alpha = rgba.getpixel((x, y))
+                if alpha > 128:
+                    pixels.append((red, green, blue))
+    if not pixels:
+        red, green, blue, _ = rgba.getpixel((width // 2, height // 2))
+        return (red, green, blue)
+    return tuple(sum(channel[i] for channel in pixels) // len(pixels) for i in range(3))
 
 
 def prepare_icon(src: Path, dest: Path) -> None:
@@ -24,9 +40,10 @@ def prepare_icon(src: Path, dest: Path) -> None:
     left = (width - side) // 2
     top = (height - side) // 2
     image = image.crop((left, top, left + side, top + side))
+    pad_rgb = sample_pad_color(image)
     image = image.resize((CONTENT, CONTENT), Image.Resampling.LANCZOS)
 
-    canvas = Image.new("RGB", (CANVAS, CANVAS), PAD_RGB)
+    canvas = Image.new("RGB", (CANVAS, CANVAS), pad_rgb)
     offset = (CANVAS - CONTENT) // 2
     if image.mode == "RGBA":
         canvas.paste(image, (offset, offset), image)
@@ -34,7 +51,9 @@ def prepare_icon(src: Path, dest: Path) -> None:
         canvas.paste(image, (offset, offset))
     dest.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(dest, "PNG")
-    print(f"Saved {dest} ({CANVAS}×{CANVAS}, opaque padding, content {CONTENT}×{CONTENT})")
+    print(
+        f"Saved {dest} ({CANVAS}×{CANVAS}, pad rgb={pad_rgb}, content {CONTENT}×{CONTENT})"
+    )
 
 
 def main() -> int:

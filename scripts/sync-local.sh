@@ -32,5 +32,5 @@ npm run icon:gen
 
 echo "✓ 已同步: $(git log -1 --oneline)"
 echo ""
-echo "自定义 Logo: npm run icon:brand"
+echo "自定义 Logo: ./scripts/apply-download-logo.sh ~/Downloads/logo.png"
 echo "启动: npm run tauri dev"
