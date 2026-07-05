@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 用本地原图生成应用 Logo（居中裁剪 + macOS 标准内边距 + 透明边距）
+# 用本地原图生成应用 Logo（居中裁剪 + 不透明边距，避免 Dock 黑边）
 # 用法: ./scripts/set-app-icon.sh /path/to/your-image.png
 set -euo pipefail
 
@@ -19,7 +19,7 @@ if ! python3 -c "import PIL" 2>/dev/null; then
   exit 1
 fi
 
-echo ">> 裁剪并添加 macOS Dock 内边距（透明边距，内容居中）…"
+echo ">> 裁剪并添加 macOS Dock 内边距（不透明边距，避免 Dock 黑边）…"
 python3 "$PREPARE" "$SRC" "$OUT"
 
 cp "$OUT" "$ROOT/public/app-logo.png"

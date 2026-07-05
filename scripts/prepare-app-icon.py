@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Prepare a macOS-friendly app icon: center crop, inset artwork, transparent canvas.
+"""Prepare a custom photo for macOS app icon.
 
-macOS Dock applies a squircle mask automatically. Artwork should NOT fill the
-full 1024×1024 canvas — leave transparent margins so the icon matches system apps.
+Uses opaque padding (not transparent) — transparent corners become black in Dock.
 """
 
 from __future__ import annotations
@@ -13,8 +12,9 @@ from pathlib import Path
 from PIL import Image
 
 CANVAS = 1024
-# ~81% content area — similar visual weight to Apple system icons in the Dock
 CONTENT = 832
+# Opaque pad color (matches brand icon top blue)
+PAD_RGB = (59, 130, 246)
 
 
 def prepare_icon(src: Path, dest: Path) -> None:
@@ -26,16 +26,15 @@ def prepare_icon(src: Path, dest: Path) -> None:
     image = image.crop((left, top, left + side, top + side))
     image = image.resize((CONTENT, CONTENT), Image.Resampling.LANCZOS)
 
-    canvas = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
+    canvas = Image.new("RGB", (CANVAS, CANVAS), PAD_RGB)
     offset = (CANVAS - CONTENT) // 2
-    canvas.paste(image, (offset, offset), image)
+    if image.mode == "RGBA":
+        canvas.paste(image, (offset, offset), image)
+    else:
+        canvas.paste(image, (offset, offset))
     dest.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(dest, "PNG")
-    margin = offset
-    print(
-        f"Saved {dest} ({CANVAS}×{CANVAS}, content {CONTENT}×{CONTENT}, "
-        f"margin {margin}px, transparent padding)"
-    )
+    print(f"Saved {dest} ({CANVAS}×{CANVAS}, opaque padding, content {CONTENT}×{CONTENT})")
 
 
 def main() -> int:
