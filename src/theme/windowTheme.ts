@@ -1,15 +1,20 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ResolvedTheme } from "./types";
 
-/** macOS 顶栏与交通灯布局（与 tauri.conf.json trafficLightPosition 一致，参考备忘录） */
+/** macOS 顶栏与交通灯布局（与 tauri.conf.json trafficLightPosition 一致） */
 export const MAC_TITLEBAR_HEIGHT = 52;
+
+/** 侧栏按钮 + 标题双行的大致行高，用于与交通灯垂直对齐 */
+export const MAC_TOOLBAR_ROW_HEIGHT = 34;
 
 export const MAC_TITLEBAR = {
   trafficX: 19,
-  trafficY: 25,
+  /** Tauri：交通灯簇垂直中心（逻辑像素，自窗口顶） */
+  trafficY: 28,
   clusterWidth: 52,
   gapAfterTraffic: 8,
   height: MAC_TITLEBAR_HEIGHT,
+  toolbarRowHeight: MAC_TOOLBAR_ROW_HEIGHT,
   toolbarControlSize: 32,
 } as const;
 
@@ -65,14 +70,20 @@ export function applyTitlebarInset() {
   const root = document.documentElement;
 
   if (mac) {
-    const { trafficX, clusterWidth, gapAfterTraffic, height, toolbarControlSize } = MAC_TITLEBAR;
+    const { trafficX, clusterWidth, gapAfterTraffic, height, toolbarControlSize, trafficY, toolbarRowHeight } =
+      MAC_TITLEBAR;
+    const toolbarOffset = Math.max(0, trafficY - toolbarRowHeight / 2);
     root.style.setProperty("--header-height", `${height}px`);
     root.style.setProperty("--header-content-inset", `${trafficX + clusterWidth + gapAfterTraffic}px`);
     root.style.setProperty("--header-control-size", `${toolbarControlSize}px`);
+    root.style.setProperty("--mac-traffic-center-y", `${trafficY}px`);
+    root.style.setProperty("--header-toolbar-row-height", `${toolbarRowHeight}px`);
+    root.style.setProperty("--header-toolbar-offset", `${toolbarOffset}px`);
   } else {
     root.style.setProperty("--header-height", "56px");
     root.style.setProperty("--header-content-inset", "16px");
     root.style.setProperty("--header-control-size", "32px");
+    root.style.setProperty("--header-toolbar-offset", "0px");
   }
 
   root.style.setProperty("--titlebar-inset", `${getTitlebarInset()}px`);

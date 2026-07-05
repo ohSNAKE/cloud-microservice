@@ -66,21 +66,23 @@ body,
 .app-header {
   background: var(--color-surface) !important;
   border-bottom: 1px solid var(--color-border-light);
-  padding: 0 16px 0 var(--header-content-inset) !important;
+  padding: var(--header-toolbar-offset, 0) 16px 0 var(--header-content-inset) !important;
   height: var(--header-height) !important;
   min-height: var(--header-height) !important;
   line-height: normal !important;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   flex-shrink: 0;
   z-index: 10;
+  box-sizing: border-box;
 }
 
 .app-header__leading {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  height: var(--header-toolbar-row-height, var(--header-control-size, 32px));
   margin-right: 2px;
 }
 
@@ -115,6 +117,7 @@ body,
 .app-header__main {
   flex: 1;
   min-width: 0;
+  min-height: var(--header-toolbar-row-height, var(--header-control-size, 32px));
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -125,6 +128,7 @@ body,
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  height: var(--header-toolbar-row-height, var(--header-control-size, 32px));
 }
 
 .app-header__icon-btn {
