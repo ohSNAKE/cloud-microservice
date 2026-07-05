@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Button, Input, Typography } from "antd";
+import { Input, Typography } from "antd";
 import { LockOutlined } from "@ant-design/icons";
 import { api } from "../api";
 import AppLogo from "./AppLogo";
@@ -40,7 +40,7 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
           应用已锁定
         </Typography.Title>
         <Typography.Text type="secondary" className="app-lock-screen__hint">
-          输入密码后点击解锁
+          输入密码后按回车
         </Typography.Text>
 
         <Input.Password
@@ -55,6 +55,7 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
             setPassword(e.target.value);
             if (error) setError("");
           }}
+          onPressEnter={() => void tryUnlock()}
         />
 
         {error && (
@@ -62,18 +63,6 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
             {error}
           </Typography.Text>
         )}
-
-        <Button
-          type="primary"
-          size="large"
-          block
-          loading={verifying}
-          disabled={!password.trim()}
-          className="app-lock-screen__submit"
-          onClick={() => void tryUnlock()}
-        >
-          解锁
-        </Button>
       </div>
     </div>
   );

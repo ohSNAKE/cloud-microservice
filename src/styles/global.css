@@ -288,18 +288,13 @@ body,
 }
 
 .app-lock-screen__input {
-  margin-bottom: 12px;
   text-align: left;
 }
 
 .app-lock-screen__error {
   display: block;
-  margin-bottom: 12px;
+  margin-top: 12px;
   font-size: 13px;
-}
-
-.app-lock-screen__submit {
-  margin-top: 4px;
 }
 
 .app-lock-screen--loading .app-lock-screen__panel {
