@@ -2,6 +2,7 @@ mod db;
 pub mod models;
 pub mod commands;
 pub mod services;
+mod macos_window;
 
 use commands::holdings::refresh_all_quotes;
 use commands::recurring::process_recurring_rules;
@@ -25,6 +26,11 @@ fn register_global_shortcuts(app: &tauri::AppHandle) -> Result<(), Box<dyn std::
         }
     })?;
     Ok(())
+}
+
+#[tauri::command]
+fn configure_macos_titlebar(window: tauri::WebviewWindow) {
+    macos_window::configure(&window);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -51,6 +57,12 @@ pub fn run() {
                     let _ = refresh_all_quotes(&state).await;
                 }
             });
+
+            if let Some(window) = app.get_webview_window("main") {
+                macos_window::configure(&window);
+                macos_window::attach_listeners(&window);
+                macos_window::schedule_delayed_configure(&window);
+            }
 
             Ok(())
         })
@@ -101,6 +113,7 @@ pub fn run() {
             commands::export_data,
             commands::import_data,
             commands::parse_transaction_nl_command,
+            configure_macos_titlebar,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

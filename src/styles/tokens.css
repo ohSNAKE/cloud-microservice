@@ -26,6 +26,7 @@
   --content-max-width: 1280px;
   --header-height: 56px;
   --header-content-inset: 16px;
+  --header-control-size: 32px;
   --titlebar-inset: 0px;
   --color-toolbar-btn: rgba(0, 0, 0, 0.05);
   --color-toolbar-btn-hover: rgba(0, 0, 0, 0.08);
