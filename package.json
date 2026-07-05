@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "icon:gen": "tauri icon assets/app-icon-source.png",
+    "icon:prep": "python3 scripts/prepare-app-icon.py assets/app-icon-source.png assets/app-icon-source.png",
     "icon:set": "bash scripts/set-app-icon.sh",
     "typecheck": "tsc --noEmit"
   },
