@@ -29,6 +29,11 @@
   --titlebar-inset: 0px;
   --color-toolbar-btn: rgba(0, 0, 0, 0.05);
   --color-toolbar-btn-hover: rgba(0, 0, 0, 0.08);
+  --color-lock-glass: rgba(255, 255, 255, 0.55);
+  --color-lock-panel: rgba(255, 255, 255, 0.72);
+  --color-lock-panel-border: rgba(255, 255, 255, 0.85);
+  --color-lock-blob-a: rgba(22, 119, 255, 0.18);
+  --color-lock-blob-b: rgba(56, 158, 13, 0.12);
   --sider-width: 228px;
 }
 
@@ -57,4 +62,9 @@
   --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 28px rgba(0, 0, 0, 0.38);
   --color-toolbar-btn: rgba(255, 255, 255, 0.08);
   --color-toolbar-btn-hover: rgba(255, 255, 255, 0.12);
+  --color-lock-glass: rgba(12, 14, 18, 0.62);
+  --color-lock-panel: rgba(23, 26, 33, 0.72);
+  --color-lock-panel-border: rgba(255, 255, 255, 0.12);
+  --color-lock-blob-a: rgba(106, 171, 255, 0.22);
+  --color-lock-blob-b: rgba(107, 203, 119, 0.1);
 }

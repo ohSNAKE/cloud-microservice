@@ -224,28 +224,91 @@ body,
 }
 
 .app-lock-screen {
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--color-bg);
+  overflow: hidden;
 }
 
-.app-lock-screen__card {
+.app-lock-screen__backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 22%, var(--color-lock-blob-a) 0%, transparent 42%),
+    radial-gradient(circle at 82% 78%, var(--color-lock-blob-b) 0%, transparent 38%),
+    var(--color-bg);
+}
+
+.app-lock-screen__glass {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  background: var(--color-lock-glass);
+}
+
+.app-lock-screen__panel {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 360px;
-  padding: 32px 28px !important;
+  max-width: 380px;
+  padding: 36px 32px 32px;
   text-align: center;
+  border-radius: 20px;
+  border: 1px solid var(--color-lock-panel-border);
+  background: var(--color-lock-panel);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: var(--shadow-md);
 }
 
 .app-lock-screen__logo {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 16px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+  border-radius: 14px;
   object-fit: cover;
   display: block;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-lock-screen__title {
+  margin: 0 0 8px !important;
+  font-weight: 600 !important;
+}
+
+.app-lock-screen__hint {
+  display: block;
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+
+.app-lock-screen__input {
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.app-lock-screen__error {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.app-lock-screen__submit {
+  margin-top: 4px;
+}
+
+.app-lock-screen--loading .app-lock-screen__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 48px 32px;
 }
 
 .page-header {

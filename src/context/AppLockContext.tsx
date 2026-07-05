@@ -80,8 +80,12 @@ export function AppLockProvider({ children }: AppLockProviderProps) {
 
   if (checking) {
     return (
-      <div className="app-lock-screen">
-        <Spin size="large" tip="加载中..." />
+      <div className="app-lock-screen app-lock-screen--loading">
+        <div className="app-lock-screen__backdrop" aria-hidden />
+        <div className="app-lock-screen__glass" aria-hidden />
+        <div className="app-lock-screen__panel">
+          <Spin size="large" tip="加载中..." />
+        </div>
       </div>
     );
   }
