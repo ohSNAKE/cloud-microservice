@@ -258,17 +258,28 @@ body,
   max-width: 320px;
 }
 
-.app-lock-screen__input.ant-input-affix-wrapper {
+.app-lock-screen__input.ant-input-affix-wrapper,
+.app-lock-screen__input.ant-input-affix-wrapper:hover,
+.app-lock-screen__input.ant-input-affix-wrapper-focused,
+.app-lock-screen__input.ant-input-affix-wrapper:focus,
+.app-lock-screen__input.ant-input-affix-wrapper:focus-within,
+.app-lock-screen__input.ant-input-affix-wrapper:not(.ant-input-affix-wrapper-disabled):hover {
   background: var(--color-lock-input-bg) !important;
   border-color: var(--color-lock-input-border) !important;
+  box-shadow: none !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
-.app-lock-screen__input.ant-input-affix-wrapper:hover,
-.app-lock-screen__input.ant-input-affix-wrapper-focused {
-  background: var(--color-lock-input-bg-hover) !important;
-  border-color: var(--color-primary) !important;
+.app-lock-screen__input.ant-input-affix-wrapper-status-error:not(.ant-input-affix-wrapper-disabled),
+.app-lock-screen__input.ant-input-affix-wrapper-status-error:not(.ant-input-affix-wrapper-disabled):hover,
+.app-lock-screen__input.ant-input-affix-wrapper-status-error:not(.ant-input-affix-wrapper-disabled):focus-within {
+  box-shadow: none !important;
+}
+
+.app-lock-screen__input.ant-input-affix-wrapper input,
+.app-lock-screen__input.ant-input-affix-wrapper input:focus {
+  box-shadow: none !important;
 }
 
 .app-lock-screen__input--shake {
