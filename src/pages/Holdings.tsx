@@ -11,8 +11,8 @@ import {
   Modal,
   Row,
   Select,
-  Space,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import {
@@ -151,62 +151,83 @@ export default function HoldingsPage() {
 
   const renderHoldingCard = (holding: Holding) => (
     <Card key={holding.id} className="stat-card holding-card" hoverable>
-      <div className="holding-card__head">
-        <span className="holding-card__code">{holding.code}</span>
-        <div className="holding-card__meta">
-          <Typography.Text strong ellipsis={{ tooltip: holding.name || holding.code }}>
+      <div className="holding-card__header">
+        <div className="holding-card__title-row">
+          <Typography.Text strong className="holding-card__name" ellipsis={{ tooltip: holding.name || holding.code }}>
             {holding.name || holding.code}
           </Typography.Text>
-          <Tag color={holding.type === "fund" ? "blue" : "purple"} style={{ marginTop: 4 }}>
+          <Tag
+            bordered={false}
+            color={holding.type === "fund" ? "blue" : "purple"}
+            className="holding-card__tag"
+          >
             {holding.type === "fund" ? "基金" : "股票"}
           </Tag>
         </div>
+        <span className="holding-card__code">{holding.code}</span>
       </div>
 
-      <div className="holding-card__value">{formatMoney(holding.market_value)}</div>
-      <div className={`holding-card__profit ${holding.profit >= 0 ? "profit-positive" : "profit-negative"}`}>
-        {formatMoney(holding.profit)} · {formatPercent(holding.profit_rate)}
+      <div className="holding-card__body">
+        <div className="holding-card__value">{formatMoney(holding.market_value)}</div>
+        <div className={`holding-card__profit ${holding.profit >= 0 ? "profit-positive" : "profit-negative"}`}>
+          {formatMoney(holding.profit)} · {formatPercent(holding.profit_rate)}
+        </div>
       </div>
 
       <div className="holding-card__stats">
         <div className="holding-card__stat">
           <span className="holding-card__stat-label">数量</span>
-          <span>{holding.quantity.toLocaleString("zh-CN")}</span>
+          <span className="holding-card__stat-value">{holding.quantity.toLocaleString("zh-CN")}</span>
         </div>
         <div className="holding-card__stat">
           <span className="holding-card__stat-label">成本</span>
-          <span>{holding.cost_price.toFixed(3)}</span>
+          <span className="holding-card__stat-value">{holding.cost_price.toFixed(3)}</span>
         </div>
         <div className="holding-card__stat">
           <span className="holding-card__stat-label">现价</span>
-          <span>{holding.current_price.toFixed(3)}</span>
+          <span className="holding-card__stat-value">{holding.current_price.toFixed(3)}</span>
         </div>
       </div>
 
-      <Typography.Text type="secondary" className="holding-card__time">
-        更新 {holding.updated_at}
-      </Typography.Text>
-
-      <Space size={4} wrap className="holding-card__actions">
-        <Button type="link" size="small" icon={<LineChartOutlined />} onClick={() => setKlineHolding(holding)}>
-          K线
-        </Button>
-        <Button
-          type="link"
-          size="small"
-          icon={<EditOutlined />}
-          onClick={() => {
-            setEditing(holding);
-            editForm.setFieldsValue({ quantity: holding.quantity, cost_price: holding.cost_price });
-            setEditOpen(true);
-          }}
-        >
-          编辑
-        </Button>
-        <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDelete(holding)}>
-          删除
-        </Button>
-      </Space>
+      <div className="holding-card__footer">
+        <Typography.Text type="secondary" className="holding-card__time">
+          更新 {holding.updated_at}
+        </Typography.Text>
+        <div className="holding-card__actions">
+          <Tooltip title="K线">
+            <Button
+              type="text"
+              size="small"
+              className="holding-card__action-btn"
+              icon={<LineChartOutlined />}
+              onClick={() => setKlineHolding(holding)}
+            />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button
+              type="text"
+              size="small"
+              className="holding-card__action-btn"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(holding);
+                editForm.setFieldsValue({ quantity: holding.quantity, cost_price: holding.cost_price });
+                setEditOpen(true);
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              className="holding-card__action-btn"
+              icon={<DeleteOutlined />}
+              onClick={() => confirmDelete(holding)}
+            />
+          </Tooltip>
+        </div>
+      </div>
     </Card>
   );
 
@@ -278,7 +299,7 @@ export default function HoldingsPage() {
       ) : (
         <Row gutter={[16, 16]} className="holding-grid">
           {holdings.map((holding) => (
-            <Col key={holding.id} xs={24} sm={12} lg={8} xl={6} className="holding-grid__col">
+            <Col key={holding.id} xs={24} sm={12} lg={8} xl={8} className="holding-grid__col">
               {renderHoldingCard(holding)}
             </Col>
           ))}

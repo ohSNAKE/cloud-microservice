@@ -463,76 +463,123 @@ body,
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  padding: 16px !important;
 }
 
-.holding-card__head {
+.holding-card__header {
+  min-width: 0;
+}
+
+.holding-card__title-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.holding-card__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.holding-card__tag {
+  flex-shrink: 0;
+  margin: 0 !important;
+  line-height: 20px;
 }
 
 .holding-card__code {
-  flex-shrink: 0;
+  display: block;
+  margin-top: 4px;
   font-size: 12px;
-  font-weight: 600;
   color: var(--color-text-secondary);
-  background: var(--color-muted-surface);
-  padding: 2px 8px;
-  border-radius: 6px;
-  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
 }
 
-.holding-card__meta {
-  display: flex;
-  flex-direction: column;
+.holding-card__body {
   min-width: 0;
 }
 
 .holding-card__value {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin-bottom: 4px;
+  line-height: 1.2;
 }
 
 .holding-card__profit {
-  font-size: 14px;
+  margin-top: 4px;
+  font-size: 13px;
   font-weight: 500;
-  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .holding-card__stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  padding: 10px 0;
-  border-top: 1px solid var(--color-border-light);
-  border-bottom: 1px solid var(--color-border-light);
-  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-muted-surface);
 }
 
 .holding-card__stat {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 13px;
-  font-weight: 500;
+  min-width: 0;
 }
 
 .holding-card__stat-label {
   font-size: 11px;
-  font-weight: 400;
   color: var(--color-text-secondary);
 }
 
+.holding-card__stat-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holding-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
 .holding-card__time {
-  font-size: 12px;
-  margin-bottom: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .holding-card__actions {
-  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.holding-card__action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .summary-strip {
