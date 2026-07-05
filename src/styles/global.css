@@ -191,42 +191,134 @@ body,
   }
 }
 
-/* ── Page header ── */
-.asset-card__head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.asset-card__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--color-muted-surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.asset-card__meta {
+/* ── Asset cards (aligned with holding-card layout) ── */
+.asset-card {
+  flex: 1;
+  width: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.asset-card .ant-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px !important;
+}
+
+.asset-card__header {
   min-width: 0;
 }
 
-.asset-card__balance {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.asset-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.asset-card__balance.is-negative {
+.asset-card__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.asset-card__tag {
+  flex-shrink: 0;
+  margin: 0 !important;
+  line-height: 20px;
+}
+
+.asset-card__subtitle {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.asset-card__body {
+  min-width: 0;
+}
+
+.asset-card__value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.asset-card__value.is-negative {
   color: var(--color-expense);
 }
 
+.asset-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-muted-surface);
+}
+
+.asset-card__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.asset-card__stat-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.asset-card__stat-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.asset-card__hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.asset-card__action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Lock screen ── */
 .app-lock-screen {
   position: fixed;
   inset: 0;
@@ -496,11 +588,6 @@ body,
 
 .asset-grid > .asset-grid__col {
   display: flex;
-}
-
-.asset-card {
-  flex: 1;
-  width: 100%;
 }
 
 .holding-grid > .holding-grid__col {

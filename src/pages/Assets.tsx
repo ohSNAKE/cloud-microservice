@@ -11,16 +11,40 @@ import {
   Modal,
   Row,
   Select,
-  Space,
+  Tag,
+  Tooltip,
   Typography,
 } from "antd";
-import { EditOutlined, LineChartOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  LineChartOutlined,
+  PlusOutlined,
+  WalletOutlined,
+} from "@ant-design/icons";
 import { api, accountTypeIcon, accountTypeLabel, formatInvokeError, formatMoney } from "../api";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
 import { ACCOUNT_TYPES } from "../types";
 import type { Account, NewAccount, UpdateAccount } from "../types";
+
+function accountTypeTagColor(type: string) {
+  switch (type) {
+    case "cash":
+      return "gold";
+    case "bank":
+      return "blue";
+    case "alipay":
+      return "cyan";
+    case "wechat":
+      return "green";
+    case "broker":
+      return "purple";
+    default:
+      return "default";
+  }
+}
 
 export default function AssetsPage() {
   const navigate = useNavigate();
@@ -142,31 +166,82 @@ export default function AssetsPage() {
 
   const renderAccountCard = (account: Account) => (
     <Card key={account.id} className="stat-card asset-card" hoverable>
-      <div className="asset-card__head">
-        <span className="asset-card__icon" aria-hidden>
-          {accountTypeIcon(account.type)}
-        </span>
-        <div className="asset-card__meta">
-          <Typography.Text strong>{account.name}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {accountTypeLabel(account.type)}
+      <div className="asset-card__header">
+        <div className="asset-card__title-row">
+          <Typography.Text strong className="asset-card__name" ellipsis={{ tooltip: account.name }}>
+            {account.name}
           </Typography.Text>
+          <Tag
+            bordered={false}
+            color={accountTypeTagColor(account.type)}
+            className="asset-card__tag"
+          >
+            {accountTypeLabel(account.type)}
+          </Tag>
+        </div>
+        <span className="asset-card__subtitle">
+          {accountTypeIcon(account.type)} {accountTypeLabel(account.type)}
+        </span>
+      </div>
+
+      <div className="asset-card__body">
+        <div className={`asset-card__value ${account.balance < 0 ? "is-negative" : ""}`}>
+          {formatMoney(account.balance)}
         </div>
       </div>
-      <div className={`asset-card__balance ${account.balance < 0 ? "is-negative" : ""}`}>
-        {formatMoney(account.balance)}
+
+      <div className="asset-card__stats">
+        <div className="asset-card__stat">
+          <span className="asset-card__stat-label">类型</span>
+          <span className="asset-card__stat-value">{accountTypeLabel(account.type)}</span>
+        </div>
+        <div className="asset-card__stat">
+          <span className="asset-card__stat-label">分类</span>
+          <span className="asset-card__stat-value">
+            {account.type === "broker" ? "证券" : "个人"}
+          </span>
+        </div>
+        <div className="asset-card__stat">
+          <span className="asset-card__stat-label">计入总资产</span>
+          <span className="asset-card__stat-value">{account.type === "broker" ? "否" : "是"}</span>
+        </div>
       </div>
-      <Space size={4} wrap style={{ marginTop: 12 }}>
-        <Button type="link" size="small" onClick={() => openBalanceEdit(account)}>
-          更新余额
-        </Button>
-        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(account)}>
-          编辑
-        </Button>
-        <Button type="link" size="small" danger onClick={() => confirmDeleteAccount(account)}>
-          删除
-        </Button>
-      </Space>
+
+      <div className="asset-card__footer">
+        <Typography.Text type="secondary" className="asset-card__hint">
+          {account.type === "broker" ? "不计入可动用资产" : "可动用资产"}
+        </Typography.Text>
+        <div className="asset-card__actions">
+          <Tooltip title="更新余额">
+            <Button
+              type="text"
+              size="small"
+              className="asset-card__action-btn"
+              icon={<WalletOutlined />}
+              onClick={() => openBalanceEdit(account)}
+            />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button
+              type="text"
+              size="small"
+              className="asset-card__action-btn"
+              icon={<EditOutlined />}
+              onClick={() => openEdit(account)}
+            />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              className="asset-card__action-btn"
+              icon={<DeleteOutlined />}
+              onClick={() => confirmDeleteAccount(account)}
+            />
+          </Tooltip>
+        </div>
+      </div>
     </Card>
   );
 
@@ -222,7 +297,7 @@ export default function AssetsPage() {
       ) : (
         <Row gutter={[16, 16]} className="asset-grid">
           {personalAccounts.map((account) => (
-            <Col key={account.id} xs={24} sm={12} lg={8} xl={6} className="asset-grid__col">
+            <Col key={account.id} xs={24} sm={12} lg={8} xl={8} className="asset-grid__col">
               {renderAccountCard(account)}
             </Col>
           ))}
@@ -236,7 +311,7 @@ export default function AssetsPage() {
           </Typography.Title>
           <Row gutter={[16, 16]} className="asset-grid">
             {brokerAccounts.map((account) => (
-              <Col key={account.id} xs={24} sm={12} lg={8} xl={6} className="asset-grid__col">
+              <Col key={account.id} xs={24} sm={12} lg={8} xl={8} className="asset-grid__col">
                 {renderAccountCard(account)}
               </Col>
             ))}
