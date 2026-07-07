@@ -1,4 +1,4 @@
-use crate::models::{NewAccount, UpdateAccount, Account};
+use crate::models::{Account, NewAccount, UpdateAccount};
 use crate::AppState;
 use rusqlite::params;
 use tauri::State;
@@ -30,7 +30,11 @@ pub fn add_account(state: State<AppState>, input: NewAccount) -> Result<Account,
 }
 
 #[tauri::command]
-pub fn update_account(state: State<AppState>, id: i64, input: UpdateAccount) -> Result<Account, String> {
+pub fn update_account(
+    state: State<AppState>,
+    id: i64,
+    input: UpdateAccount,
+) -> Result<Account, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE accounts SET name = ?1, type = ?2, balance = ?3 WHERE id = ?4",

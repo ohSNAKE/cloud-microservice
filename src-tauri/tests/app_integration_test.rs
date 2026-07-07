@@ -94,11 +94,16 @@ fn test_expense_updates_account_balance() {
         [],
     )
     .unwrap();
-    conn.execute("UPDATE accounts SET balance = balance - 100 WHERE id = 1", [])
-        .unwrap();
+    conn.execute(
+        "UPDATE accounts SET balance = balance - 100 WHERE id = 1",
+        [],
+    )
+    .unwrap();
 
     let balance: f64 = conn
-        .query_row("SELECT balance FROM accounts WHERE id = 1", [], |r| r.get(0))
+        .query_row("SELECT balance FROM accounts WHERE id = 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert!((balance - 900.0).abs() < 0.01);
 }
@@ -113,11 +118,16 @@ fn test_income_updates_account_balance() {
         [],
     )
     .unwrap();
-    conn.execute("UPDATE accounts SET balance = balance + 5000 WHERE id = 1", [])
-        .unwrap();
+    conn.execute(
+        "UPDATE accounts SET balance = balance + 5000 WHERE id = 1",
+        [],
+    )
+    .unwrap();
 
     let balance: f64 = conn
-        .query_row("SELECT balance FROM accounts WHERE id = 1", [], |r| r.get(0))
+        .query_row("SELECT balance FROM accounts WHERE id = 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert!((balance - 6000.0).abs() < 0.01);
 }
@@ -196,7 +206,8 @@ fn test_price_history_cascade_delete() {
         [],
     )
     .unwrap();
-    conn.execute("DELETE FROM holdings WHERE id = 1", []).unwrap();
+    conn.execute("DELETE FROM holdings WHERE id = 1", [])
+        .unwrap();
 
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM price_history", [], |r| r.get(0))
@@ -221,7 +232,8 @@ fn stock_secid(code: &str) -> String {
 
 #[test]
 fn test_parse_stock_kline_line() {
-    let line = "2026-06-30,1420.00,1430.50,1445.00,1410.00,1234567,9876543210.00,2.50,1.20,17.00,0.85";
+    let line =
+        "2026-06-30,1420.00,1430.50,1445.00,1410.00,1234567,9876543210.00,2.50,1.20,17.00,0.85";
     let parts: Vec<&str> = line.split(',').collect();
     assert_eq!(parts[0], "2026-06-30");
     assert!((parts[1].parse::<f64>().unwrap() - 1420.0).abs() < 0.01);

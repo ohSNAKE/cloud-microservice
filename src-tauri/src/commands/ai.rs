@@ -57,9 +57,7 @@ pub async fn parse_transaction_nl_command(
             let mut stmt = conn
                 .prepare("SELECT id, name, type, balance, created_at FROM accounts ORDER BY id")
                 .map_err(|e| e.to_string())?;
-            let rows = stmt
-                .query_map([], map_account)
-                .map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], map_account).map_err(|e| e.to_string())?;
             rows.filter_map(Result::ok).collect::<Vec<_>>()
         };
 

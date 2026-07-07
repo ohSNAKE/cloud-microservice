@@ -9,7 +9,11 @@ fn enrich_budget(row: &rusqlite::Row, month: &str) -> rusqlite::Result<Budget> {
     let amount: f64 = row.get(3)?;
     let spent: f64 = row.get(6)?;
     let remaining = amount - spent;
-    let usage_rate = if amount > 0.0 { (spent / amount) * 100.0 } else { 0.0 };
+    let usage_rate = if amount > 0.0 {
+        (spent / amount) * 100.0
+    } else {
+        0.0
+    };
     Ok(Budget {
         id: row.get(0)?,
         category_id,
@@ -47,9 +51,12 @@ pub fn list_budgets(state: State<AppState>, month: Option<String>) -> Result<Vec
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map(params![pattern, filter_month], |row| enrich_budget(row, &filter_month))
+        .query_map(params![pattern, filter_month], |row| {
+            enrich_budget(row, &filter_month)
+        })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -77,7 +84,10 @@ pub fn delete_budget(state: State<AppState>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_budget_alerts(state: State<AppState>, month: Option<String>) -> Result<Vec<BudgetAlert>, String> {
+pub fn get_budget_alerts(
+    state: State<AppState>,
+    month: Option<String>,
+) -> Result<Vec<BudgetAlert>, String> {
     let budgets = list_budgets(state, month)?;
     Ok(budgets
         .into_iter()

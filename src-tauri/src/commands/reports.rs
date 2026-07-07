@@ -53,11 +53,15 @@ pub fn get_category_stats(
         })
         .map_err(|e| e.to_string())?;
 
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_portfolio_history(state: State<AppState>, days: Option<i64>) -> Result<Vec<crate::models::PortfolioHistoryPoint>, String> {
+pub fn get_portfolio_history(
+    state: State<AppState>,
+    days: Option<i64>,
+) -> Result<Vec<crate::models::PortfolioHistoryPoint>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let limit = days.unwrap_or(30);
 
@@ -82,7 +86,9 @@ pub fn get_portfolio_history(state: State<AppState>, days: Option<i64>) -> Resul
         })
         .map_err(|e| e.to_string())?;
 
-    let mut points: Vec<_> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    let mut points: Vec<_> = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
     points.reverse();
     Ok(points)
 }

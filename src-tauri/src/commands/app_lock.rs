@@ -44,7 +44,10 @@ pub fn get_app_lock_status(state: State<AppState>) -> Result<AppLockStatus, Stri
     let configured = get_setting(&conn, KEY_HASH)
         .map(|v| !v.is_empty())
         .unwrap_or(false);
-    Ok(AppLockStatus { enabled, configured })
+    Ok(AppLockStatus {
+        enabled,
+        configured,
+    })
 }
 
 #[tauri::command]

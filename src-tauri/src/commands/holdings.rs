@@ -52,7 +52,8 @@ pub fn list_holdings(state: State<AppState>) -> Result<Vec<Holding>, String> {
     let rows = stmt
         .query_map([], enrich_holding)
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 async fn resolve_holding_name(code: &str, kind: &str) -> String {
@@ -78,7 +79,10 @@ pub async fn lookup_holding_name(code: String, kind: String) -> Result<String, S
 }
 
 #[tauri::command]
-pub async fn add_holding(state: State<'_, AppState>, mut input: NewHolding) -> Result<Holding, String> {
+pub async fn add_holding(
+    state: State<'_, AppState>,
+    mut input: NewHolding,
+) -> Result<Holding, String> {
     if input.name.trim().is_empty() {
         input.name = resolve_holding_name(&input.code, &input.r#type).await;
     }
@@ -166,7 +170,9 @@ pub fn get_price_history(
         })
         .map_err(|e| e.to_string())?;
 
-    let mut points: Vec<PricePoint> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    let mut points: Vec<PricePoint> = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
     points.reverse();
     Ok(points)
 }
@@ -208,9 +214,12 @@ pub async fn refresh_all_quotes(state: &AppState) -> Result<QuoteRefreshResult, 
             .prepare("SELECT id, code, type, name FROM holdings")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
             .map_err(|e| e.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
     };
 
     let mut updated = 0usize;

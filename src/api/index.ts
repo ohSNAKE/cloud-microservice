@@ -19,7 +19,16 @@ import type {
   NewHolding,
   NewTransaction,
   ParsedTransactionBatch,
+  NewQuantWatchlistItem,
   QuoteRefreshResult,
+  QuantDashboard,
+  QuantRefreshResult,
+  QuantSignal,
+  QuantSignalFilter,
+  QuantStrategySettingsUpdate,
+  QuantTarget,
+  QuantWatchlistItem,
+  QuantWatchlistItemUpdate,
   Settings,
   AppLockStatus,
   Transaction,
@@ -85,6 +94,23 @@ export const api = {
   refreshQuotes: () => invoke<QuoteRefreshResult>("refresh_quotes"),
   getKlineData: (code: string, kind: string, period?: KlinePeriod, limit?: number) =>
     invoke<KlineData>("get_kline_data", { code, kind, period, limit }),
+
+  listQuantWatchlist: () => invoke<QuantWatchlistItem[]>("list_quant_watchlist"),
+  addQuantWatchlist: (input: NewQuantWatchlistItem) =>
+    invoke<QuantWatchlistItem>("add_quant_watchlist", { input }),
+  updateQuantWatchlist: (id: number, input: QuantWatchlistItemUpdate) =>
+    invoke<QuantWatchlistItem>("update_quant_watchlist", { id, input }),
+  deleteQuantWatchlist: (id: number) => invoke<void>("delete_quant_watchlist", { id }),
+  updateQuantStrategySettings: (
+    code: string,
+    market: string,
+    input: QuantStrategySettingsUpdate,
+  ) => invoke<QuantTarget>("update_quant_strategy_settings", { code, market, input }),
+  listQuantTargets: () => invoke<QuantTarget[]>("list_quant_targets"),
+  getQuantDashboard: () => invoke<QuantDashboard>("get_quant_dashboard"),
+  refreshQuantSignals: () => invoke<QuantRefreshResult>("refresh_quant_signals"),
+  listQuantSignals: (filter?: QuantSignalFilter) =>
+    invoke<QuantSignal[]>("list_quant_signals", { filter }),
 
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),

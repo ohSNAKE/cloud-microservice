@@ -29,7 +29,11 @@ pub fn add_category(state: State<AppState>, input: NewCategory) -> Result<Catego
 }
 
 #[tauri::command]
-pub fn update_category(state: State<AppState>, id: i64, input: UpdateCategory) -> Result<Category, String> {
+pub fn update_category(
+    state: State<AppState>,
+    id: i64,
+    input: UpdateCategory,
+) -> Result<Category, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE categories SET name = ?1, icon = ?2 WHERE id = ?3",

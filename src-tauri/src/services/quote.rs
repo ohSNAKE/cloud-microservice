@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 struct EastMoneyResponse {
@@ -9,6 +10,16 @@ struct EastMoneyResponse {
 struct EastMoneyData {
     f43: Option<f64>,
     f58: Option<String>,
+    f124: Option<i64>,
+    f292: Option<Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RealtimeStockQuote {
+    pub price: f64,
+    pub exchange_timestamp: Option<i64>,
+    pub market_status: Option<String>,
+    pub quote_fetched_at: String,
 }
 
 fn stock_secid(code: &str) -> String {
@@ -29,11 +40,63 @@ fn http_get(url: &str) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-pub async fn fetch_stock_price(code: &str) -> Result<f64, String> {
+fn quote_status_allows_strict_signal(market_status: Option<&str>) -> bool {
+    matches!(market_status.map(str::trim), Some("5") | Some("交易中"))
+}
+
+fn parse_realtime_stock_quote(
+    code: &str,
+    market: &str,
+    text: &str,
+) -> Result<RealtimeStockQuote, String> {
+    let body: EastMoneyResponse = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let data = body
+        .data
+        .ok_or_else(|| format!("missing quote data for stock {market}:{code}"))?;
+    let price_cents = data
+        .f43
+        .ok_or_else(|| format!("missing price for stock {market}:{code}"))?;
+    let market_status = data.f292.and_then(|value| match value {
+        Value::Null => None,
+        Value::String(status) => Some(status),
+        Value::Number(status) => Some(status.to_string()),
+        Value::Bool(status) => Some(status.to_string()),
+        other => Some(other.to_string()),
+    });
+
+    if data.f124.is_none() && !quote_status_allows_strict_signal(market_status.as_deref()) {
+        return Err(format!(
+            "missing time/status strict signal for stock {market}:{code}"
+        ));
+    }
+
+    Ok(RealtimeStockQuote {
+        price: price_cents / 100.0,
+        exchange_timestamp: data.f124,
+        market_status,
+        quote_fetched_at: crate::db::now_local(),
+    })
+}
+
+pub async fn fetch_stock_realtime_quote(
+    code: &str,
+    market: &str,
+) -> Result<RealtimeStockQuote, String> {
     let secid = stock_secid(code);
     let url = format!(
-        "https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f58"
+        "https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f58,f124,f292"
     );
+
+    let text = tokio::task::spawn_blocking(move || http_get(&url))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    parse_realtime_stock_quote(code, market, &text)
+}
+
+pub async fn fetch_stock_price(code: &str) -> Result<f64, String> {
+    let secid = stock_secid(code);
+    let url = format!("https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f58");
 
     let text = tokio::task::spawn_blocking(move || http_get(&url))
         .await
@@ -90,9 +153,7 @@ pub async fn lookup_fund_name(code: &str) -> Result<String, String> {
 
 pub async fn lookup_stock_name(code: &str) -> Result<String, String> {
     let secid = stock_secid(code);
-    let url = format!(
-        "https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f58"
-    );
+    let url = format!("https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f58");
 
     let text = tokio::task::spawn_blocking(move || http_get(&url))
         .await
@@ -243,4 +304,79 @@ pub async fn fetch_fund_kline(
         return Err(format!("基金 {code} 暂无净值数据"));
     }
     Ok(bars)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn realtime_parser_rejects_missing_timestamp_and_status() {
+        let err = parse_realtime_stock_quote(
+            "600000",
+            "SH",
+            r#"{ "data": { "f43": 1234, "f58": "浦发银行" } }"#,
+        )
+        .expect_err("missing timestamp/status should be rejected");
+
+        let err = err.to_lowercase();
+        assert!(err.contains("time"));
+        assert!(err.contains("status"));
+    }
+
+    #[test]
+    fn realtime_parser_rejects_missing_price() {
+        let err = parse_realtime_stock_quote(
+            "600000",
+            "SH",
+            r#"{ "data": { "f124": 1783419000, "f292": 5, "f58": "浦发银行" } }"#,
+        )
+        .expect_err("missing price should be rejected");
+
+        assert!(err.to_lowercase().contains("price"));
+    }
+
+    #[test]
+    fn realtime_parser_accepts_price_and_exchange_timestamp() {
+        let quote = parse_realtime_stock_quote(
+            "600000",
+            "SH",
+            r#"{ "data": { "f43": 1234, "f124": 1783419000, "f292": 5, "f58": "浦发银行" } }"#,
+        )
+        .expect("timestamp quote should parse");
+
+        assert_eq!(quote.price, 12.34);
+        assert_eq!(quote.exchange_timestamp, Some(1783419000));
+        assert_eq!(quote.market_status.as_deref(), Some("5"));
+        assert!(!quote.quote_fetched_at.trim().is_empty());
+    }
+
+    #[test]
+    fn realtime_parser_accepts_explicit_open_market_status_without_timestamp() {
+        let quote = parse_realtime_stock_quote(
+            "600000",
+            "SH",
+            r#"{ "data": { "f43": 1234, "f292": 5, "f58": "浦发银行" } }"#,
+        )
+        .expect("open market status should allow quote without timestamp");
+
+        assert_eq!(quote.price, 12.34);
+        assert_eq!(quote.exchange_timestamp, None);
+        assert_eq!(quote.market_status.as_deref(), Some("5"));
+        assert!(!quote.quote_fetched_at.trim().is_empty());
+    }
+
+    #[test]
+    fn realtime_parser_rejects_closed_market_status_without_timestamp() {
+        let err = parse_realtime_stock_quote(
+            "600000",
+            "SH",
+            r#"{ "data": { "f43": 1234, "f292": 0, "f58": "浦发银行" } }"#,
+        )
+        .expect_err("closed market status without timestamp should be rejected");
+
+        let err = err.to_lowercase();
+        assert!(err.contains("time"));
+        assert!(err.contains("status"));
+    }
 }

@@ -97,8 +97,51 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
             FOREIGN KEY (account_id) REFERENCES accounts(id)
         );
 
+        CREATE TABLE IF NOT EXISTS quant_watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'cn',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(code, market)
+        );
+
+        CREATE TABLE IF NOT EXISTS quant_strategy_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'cn',
+            ma_short INTEGER NOT NULL DEFAULT 5,
+            ma_long INTEGER NOT NULL DEFAULT 20,
+            grid_lookback_days INTEGER NOT NULL DEFAULT 20,
+            poll_interval_seconds INTEGER NOT NULL DEFAULT 60,
+            desktop_notification_enabled INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(code, market)
+        );
+
+        CREATE TABLE IF NOT EXISTS quant_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'cn',
+            direction TEXT NOT NULL,
+            trigger_price REAL NOT NULL,
+            trend_state TEXT NOT NULL,
+            source TEXT NOT NULL,
+            trigger_zone TEXT NOT NULL,
+            dedupe_key TEXT NOT NULL,
+            triggered_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+
         CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
         CREATE INDEX IF NOT EXISTS idx_price_history_holding ON price_history(holding_id, recorded_at);
+        CREATE INDEX IF NOT EXISTS idx_quant_signals_code_time ON quant_signals(code, triggered_at);
+        CREATE INDEX IF NOT EXISTS idx_quant_signals_dedupe_time ON quant_signals(dedupe_key, triggered_at);
         ",
     )?;
 
@@ -148,6 +191,46 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
             FOREIGN KEY (category_id) REFERENCES categories(id),
             FOREIGN KEY (account_id) REFERENCES accounts(id)
         );
+        CREATE TABLE IF NOT EXISTS quant_watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'cn',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(code, market)
+        );
+        CREATE TABLE IF NOT EXISTS quant_strategy_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'cn',
+            ma_short INTEGER NOT NULL DEFAULT 5,
+            ma_long INTEGER NOT NULL DEFAULT 20,
+            grid_lookback_days INTEGER NOT NULL DEFAULT 20,
+            poll_interval_seconds INTEGER NOT NULL DEFAULT 60,
+            desktop_notification_enabled INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(code, market)
+        );
+        CREATE TABLE IF NOT EXISTS quant_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'cn',
+            direction TEXT NOT NULL,
+            trigger_price REAL NOT NULL,
+            trend_state TEXT NOT NULL,
+            source TEXT NOT NULL,
+            trigger_zone TEXT NOT NULL,
+            dedupe_key TEXT NOT NULL,
+            triggered_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_quant_signals_code_time ON quant_signals(code, triggered_at);
+        CREATE INDEX IF NOT EXISTS idx_quant_signals_dedupe_time ON quant_signals(dedupe_key, triggered_at);
         ",
     )?;
 
@@ -162,7 +245,8 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let account_count: i64 = conn.query_row("SELECT COUNT(*) FROM accounts", [], |row| row.get(0))?;
+    let account_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM accounts", [], |row| row.get(0))?;
     if account_count == 0 {
         for (name, kind) in [
             ("现金", "cash"),
@@ -203,7 +287,8 @@ fn seed_defaults(conn: &Connection) -> Result<(), rusqlite::Error> {
         }
     }
 
-    let settings_count: i64 = conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
+    let settings_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))?;
     if settings_count == 0 {
         for (key, value) in [
             ("quote_update_interval", "30"),

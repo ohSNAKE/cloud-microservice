@@ -117,11 +117,15 @@ pub fn list_accounts(state: State<AppState>) -> Result<Vec<Account>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn list_categories(state: State<AppState>, kind: Option<String>) -> Result<Vec<Category>, String> {
+pub fn list_categories(
+    state: State<AppState>,
+    kind: Option<String>,
+) -> Result<Vec<Category>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut sql = String::from("SELECT id, name, type, icon FROM categories");
     if kind.is_some() {
@@ -131,11 +135,14 @@ pub fn list_categories(state: State<AppState>, kind: Option<String>) -> Result<V
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let rows = if let Some(ref t) = kind {
-        stmt.query_map(params![t], map_category).map_err(|e| e.to_string())?
+        stmt.query_map(params![t], map_category)
+            .map_err(|e| e.to_string())?
     } else {
-        stmt.query_map([], map_category).map_err(|e| e.to_string())?
+        stmt.query_map([], map_category)
+            .map_err(|e| e.to_string())?
     };
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -180,11 +187,15 @@ pub fn list_transactions(
     let rows = stmt
         .query_map(params.as_slice(), map_transaction)
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn add_transaction(state: State<AppState>, input: NewTransaction) -> Result<Transaction, String> {
+pub fn add_transaction(
+    state: State<AppState>,
+    input: NewTransaction,
+) -> Result<Transaction, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let note = input.note.unwrap_or_default();
 
@@ -337,9 +348,11 @@ pub fn get_dashboard(state: State<AppState>) -> Result<DashboardSummary, String>
         .map_err(|e| e.to_string())?;
 
     let account_balance: f64 = conn
-        .query_row("SELECT COALESCE(SUM(balance), 0) FROM accounts", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT COALESCE(SUM(balance), 0) FROM accounts",
+            [],
+            |row| row.get(0),
+        )
         .map_err(|e| e.to_string())?;
 
     let holding_value: f64 = conn
@@ -407,7 +420,10 @@ pub fn get_dashboard(state: State<AppState>) -> Result<DashboardSummary, String>
 }
 
 #[tauri::command]
-pub fn get_monthly_stats(state: State<AppState>, months: Option<i64>) -> Result<Vec<MonthlyStat>, String> {
+pub fn get_monthly_stats(
+    state: State<AppState>,
+    months: Option<i64>,
+) -> Result<Vec<MonthlyStat>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let limit = months.unwrap_or(6);
 
@@ -434,7 +450,9 @@ pub fn get_monthly_stats(state: State<AppState>, months: Option<i64>) -> Result<
         })
         .map_err(|e| e.to_string())?;
 
-    let mut stats: Vec<MonthlyStat> = rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    let mut stats: Vec<MonthlyStat> = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
     stats.reverse();
     Ok(stats)
 }

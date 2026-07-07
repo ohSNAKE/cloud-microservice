@@ -7,6 +7,7 @@ import {
   DashboardOutlined,
   LineChartOutlined,
   SettingOutlined,
+  StockOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography } from "antd";
@@ -16,6 +17,7 @@ import DashboardPage from "./pages/Dashboard";
 import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
 import HoldingsPage from "./pages/Holdings";
+import QuantAlertsPage from "./pages/QuantAlerts";
 import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
@@ -29,6 +31,7 @@ const menuItems = [
   { key: "/assets", icon: <BankOutlined />, label: "我的资产" },
   { key: "/transactions", icon: <WalletOutlined />, label: "记账" },
   { key: "/holdings", icon: <LineChartOutlined />, label: "投资持仓" },
+  { key: "/quant", icon: <StockOutlined />, label: "量化提醒" },
   { key: "/reports", icon: <BarChartOutlined />, label: "报表分析" },
   { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];
@@ -38,6 +41,7 @@ const routeMeta: Record<string, { title: string; subtitle: string }> = {
   "/assets": { title: "我的资产", subtitle: "登记银行卡、支付宝、现金等个人余额" },
   "/transactions": { title: "记账", subtitle: "追踪每一笔收入与支出" },
   "/holdings": { title: "投资持仓", subtitle: "股票基金市值与盈亏" },
+  "/quant": { title: "量化提醒", subtitle: "盘中趋势信号与买卖关注提醒" },
   "/reports": { title: "报表分析", subtitle: "分类统计、预算与趋势" },
   "/settings": { title: "设置", subtitle: "AI 记账、行情与数据备份" },
 };
@@ -124,6 +128,7 @@ function AppLayout() {
                 <Route path="/assets" element={<AssetsPage />} />
                 <Route path="/transactions" element={<TransactionsPage />} />
                 <Route path="/holdings" element={<HoldingsPage />} />
+                <Route path="/quant" element={<QuantAlertsPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,6 @@
+pub mod commands;
 mod db;
 pub mod models;
-pub mod commands;
 pub mod services;
 
 use commands::holdings::refresh_all_quotes;
@@ -19,11 +19,12 @@ pub struct AppState {
 
 fn register_global_shortcuts(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let shortcut = Shortcut::from_str("CommandOrControl+N")?;
-    app.global_shortcut().on_shortcut(shortcut, |app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            let _ = app.emit("quick-add-transaction", ());
-        }
-    })?;
+    app.global_shortcut()
+        .on_shortcut(shortcut, |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                let _ = app.emit("quick-add-transaction", ());
+            }
+        })?;
     Ok(())
 }
 
@@ -32,6 +33,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let conn = init_db(app.handle()).map_err(|e| e.to_string())?;
             app.manage(AppState {
@@ -89,6 +91,15 @@ pub fn run() {
             commands::get_price_history,
             commands::get_kline_data,
             commands::refresh_quotes,
+            commands::list_quant_watchlist,
+            commands::add_quant_watchlist,
+            commands::update_quant_watchlist,
+            commands::delete_quant_watchlist,
+            commands::list_quant_targets,
+            commands::list_quant_signals,
+            commands::get_quant_dashboard,
+            commands::refresh_quant_signals,
+            commands::update_quant_strategy_settings,
             commands::get_settings,
             commands::update_settings,
             commands::get_app_lock_status,

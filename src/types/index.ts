@@ -271,6 +271,102 @@ export interface PortfolioHistoryPoint {
   total_value: number;
 }
 
+export type QuantDirection = "buy_attention" | "sell_attention";
+export type QuantTrendState = "bullish" | "bearish" | "neutral" | "insufficient_data";
+export type QuantOutputState = QuantDirection | "watch" | "quote_error";
+export type QuantTriggerZone = "buy_1" | "buy_2" | "sell_1" | "sell_2";
+
+export interface QuantWatchlistItem {
+  id: number;
+  code: string;
+  name: string;
+  market: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewQuantWatchlistItem {
+  code: string;
+  name?: string;
+  market?: string;
+  enabled?: boolean;
+}
+
+export interface QuantWatchlistItemUpdate {
+  name: string;
+  enabled: boolean;
+}
+
+export interface QuantStrategySettingsUpdate {
+  enabled: boolean;
+  desktop_notification_enabled: boolean;
+}
+
+export interface QuantGridZone {
+  zone: QuantTriggerZone;
+  direction: QuantDirection;
+  lower: number;
+  upper: number;
+}
+
+export interface QuantSignal {
+  id: number;
+  code: string;
+  name: string;
+  market: string;
+  direction: QuantDirection;
+  trigger_price: number;
+  trend_state: "bullish" | "bearish" | "neutral";
+  source: "auto_grid";
+  trigger_zone: QuantTriggerZone;
+  triggered_at: string;
+}
+
+export interface QuantGeneratedSignal {
+  signal: QuantSignal;
+  desktop_notification_enabled: boolean;
+}
+
+export interface QuantTarget {
+  code: string;
+  name: string;
+  market: string;
+  source: "holding" | "watchlist" | "holding_watchlist";
+  enabled: boolean;
+  desktop_notification_enabled: boolean;
+  current_price: number | null;
+  quote_fetched_at: string | null;
+  trend_state: QuantTrendState;
+  output_state: QuantOutputState;
+  current_trigger_zone: QuantTriggerZone | null;
+  ma_short: number | null;
+  ma_long: number | null;
+  grid_zones: QuantGridZone[];
+  latest_signal: QuantSignal | null;
+  last_error: string | null;
+}
+
+export interface QuantDashboard {
+  is_trading_time: boolean;
+  next_refresh_at: string | null;
+  targets: QuantTarget[];
+  recent_signals: QuantSignal[];
+}
+
+export interface QuantRefreshResult {
+  dashboard: QuantDashboard;
+  generated_signals: QuantGeneratedSignal[];
+}
+
+export interface QuantSignalFilter {
+  code?: string;
+  direction?: QuantDirection;
+  from?: string;
+  to?: string;
+  limit?: number;
+}
+
 export const ACCOUNT_TYPES = [
   { label: "现金", value: "cash", icon: "cash" },
   { label: "银行卡", value: "bank", icon: "bank" },

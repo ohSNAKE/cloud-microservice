@@ -37,14 +37,16 @@ pub fn list_recurring_rules(state: State<AppState>) -> Result<Vec<RecurringRule>
     let mut stmt = conn
         .prepare(&format!("{RULE_SELECT} ORDER BY r.id"))
         .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], map_rule)
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    let rows = stmt.query_map([], map_rule).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn add_recurring_rule(state: State<AppState>, input: NewRecurringRule) -> Result<RecurringRule, String> {
+pub fn add_recurring_rule(
+    state: State<AppState>,
+    input: NewRecurringRule,
+) -> Result<RecurringRule, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let note = input.note.unwrap_or_default();
     let day = input.day_of_month.clamp(1, 28);
@@ -139,7 +141,16 @@ pub fn process_recurring_rules(state: &AppState) -> Result<usize, String> {
         )
         .map_err(|e| e.to_string())?;
 
-    let rules: Vec<(i64, String, f64, Option<i64>, Option<i64>, String, i64, Option<String>)> = stmt
+    let rules: Vec<(
+        i64,
+        String,
+        f64,
+        Option<i64>,
+        Option<i64>,
+        String,
+        i64,
+        Option<String>,
+    )> = stmt
         .query_map([], |row| {
             Ok((
                 row.get(0)?,

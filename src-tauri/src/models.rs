@@ -275,6 +275,150 @@ pub struct KlineData {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantWatchlistItem {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub market: String,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NewQuantWatchlistItem {
+    pub code: String,
+    pub name: Option<String>,
+    pub market: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantWatchlistItemUpdate {
+    pub name: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantStrategySettingsUpdate {
+    pub enabled: bool,
+    pub desktop_notification_enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantGridZone {
+    pub zone: String,
+    pub direction: String,
+    pub lower: f64,
+    pub upper: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantSignal {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub market: String,
+    pub direction: String,
+    pub trigger_price: f64,
+    pub trend_state: String,
+    pub source: String,
+    pub trigger_zone: String,
+    pub triggered_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantGeneratedSignal {
+    pub signal: QuantSignal,
+    pub desktop_notification_enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantTarget {
+    pub code: String,
+    pub name: String,
+    pub market: String,
+    pub source: String,
+    pub enabled: bool,
+    pub desktop_notification_enabled: bool,
+    pub current_price: Option<f64>,
+    pub quote_fetched_at: Option<String>,
+    pub trend_state: String,
+    pub output_state: String,
+    pub current_trigger_zone: Option<String>,
+    pub ma_short: Option<f64>,
+    pub ma_long: Option<f64>,
+    pub grid_zones: Vec<QuantGridZone>,
+    pub latest_signal: Option<QuantSignal>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantDashboard {
+    pub is_trading_time: bool,
+    pub next_refresh_at: Option<String>,
+    pub targets: Vec<QuantTarget>,
+    pub recent_signals: Vec<QuantSignal>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantRefreshResult {
+    pub dashboard: QuantDashboard,
+    pub generated_signals: Vec<QuantGeneratedSignal>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct QuantSignalFilter {
+    pub code: Option<String>,
+    pub direction: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantWatchlistRow {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub market: String,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantStrategySettingsRow {
+    pub id: i64,
+    pub code: String,
+    pub market: String,
+    pub ma_short: i64,
+    pub ma_long: i64,
+    pub grid_lookback_days: i64,
+    pub poll_interval_seconds: i64,
+    pub desktop_notification_enabled: bool,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantSignalRow {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub market: String,
+    pub direction: String,
+    pub trigger_price: f64,
+    pub trend_state: String,
+    pub source: String,
+    pub trigger_zone: String,
+    pub dedupe_key: String,
+    pub triggered_at: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportPayload {
     pub version: String,
     pub exported_at: String,
@@ -283,6 +427,12 @@ pub struct ExportPayload {
     pub transactions: Vec<TransactionRow>,
     pub holdings: Vec<HoldingRow>,
     pub settings: Vec<(String, String)>,
+    #[serde(default)]
+    pub quant_watchlist: Vec<QuantWatchlistRow>,
+    #[serde(default)]
+    pub quant_strategy_settings: Vec<QuantStrategySettingsRow>,
+    #[serde(default)]
+    pub quant_signals: Vec<QuantSignalRow>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

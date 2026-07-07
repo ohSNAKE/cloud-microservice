@@ -49,33 +49,34 @@ pub fn parse_transactions_nl(
     let segments = split_segments(trimmed);
     let is_multi = segments.len() > 1;
 
-    let (mut items, source, mut parse_notice) = if config.ai_enabled && !config.ai_api_key.trim().is_empty() {
-        match parse_with_llm(trimmed, categories, accounts, config) {
-            Ok(result) => result,
-            Err(err) => {
-                eprintln!("AI 解析失败，使用规则兜底: {err}");
-                let brief = if err.contains("503") {
-                    "503 服务暂时不可用".to_string()
-                } else if err.len() > 60 {
-                    format!("{}…", &err[..60])
-                } else {
-                    err.clone()
-                };
-                let notice = Some(format!("AI 暂不可用（{brief}），已使用本地规则识别"));
-                (
-                    parse_transactions_with_rules(&segments, accounts)?,
-                    "rule".to_string(),
-                    notice,
-                )
+    let (mut items, source, mut parse_notice) =
+        if config.ai_enabled && !config.ai_api_key.trim().is_empty() {
+            match parse_with_llm(trimmed, categories, accounts, config) {
+                Ok(result) => result,
+                Err(err) => {
+                    eprintln!("AI 解析失败，使用规则兜底: {err}");
+                    let brief = if err.contains("503") {
+                        "503 服务暂时不可用".to_string()
+                    } else if err.len() > 60 {
+                        format!("{}…", &err[..60])
+                    } else {
+                        err.clone()
+                    };
+                    let notice = Some(format!("AI 暂不可用（{brief}），已使用本地规则识别"));
+                    (
+                        parse_transactions_with_rules(&segments, accounts)?,
+                        "rule".to_string(),
+                        notice,
+                    )
+                }
             }
-        }
-    } else {
-        (
-            parse_transactions_with_rules(&segments, accounts)?,
-            "rule".to_string(),
-            None,
-        )
-    };
+        } else {
+            (
+                parse_transactions_with_rules(&segments, accounts)?,
+                "rule".to_string(),
+                None,
+            )
+        };
 
     if items.is_empty() {
         return Err("未能识别任何记账记录，请补充金额或拆分描述".to_string());
@@ -224,7 +225,10 @@ fn parse_with_llm(
         .timeout_read(std::time::Duration::from_secs(90))
         .build()
         .post(&url)
-        .set("Authorization", &format!("Bearer {}", config.ai_api_key.trim()))
+        .set(
+            "Authorization",
+            &format!("Bearer {}", config.ai_api_key.trim()),
+        )
         .set("Content-Type", "application/json")
         .send_json(body)
         .map_err(|e| format!("AI 请求失败: {e}"))?;
@@ -267,7 +271,10 @@ fn parse_with_llm(
     Ok((items, "ai".to_string(), None))
 }
 
-fn llm_item_to_draft(llm: &LlmParseResult, raw_text: &str) -> Result<ParsedTransactionDraft, String> {
+fn llm_item_to_draft(
+    llm: &LlmParseResult,
+    raw_text: &str,
+) -> Result<ParsedTransactionDraft, String> {
     let tx_type = normalize_type(llm.r#type.as_deref().unwrap_or("expense"));
     let amount = llm.amount.filter(|a| *a > 0.0);
 
@@ -309,22 +316,20 @@ fn enrich_draft(
     draft.r#type = tx_type.to_string();
 
     if draft.category_id.is_none() {
-        draft.category_id = resolve_category_id(
-            draft.category_name.as_deref(),
-            text,
-            tx_type,
-            categories,
-        );
+        draft.category_id =
+            resolve_category_id(draft.category_name.as_deref(), text, tx_type, categories);
         if draft.category_name.is_none() {
-            draft.category_name = draft
-                .category_id
-                .and_then(|id| categories.iter().find(|c| c.id == id).map(|c| c.name.clone()));
+            draft.category_name = draft.category_id.and_then(|id| {
+                categories
+                    .iter()
+                    .find(|c| c.id == id)
+                    .map(|c| c.name.clone())
+            });
         }
     }
 
     if draft.account_id.is_none() {
-        draft.account_id =
-            resolve_account_id(draft.account_name.as_deref(), text, accounts);
+        draft.account_id = resolve_account_id(draft.account_name.as_deref(), text, accounts);
         if draft.account_name.is_none() {
             draft.account_name = draft
                 .account_id
@@ -347,7 +352,9 @@ fn normalize_type(raw: &str) -> &'static str {
 }
 
 fn detect_type(text: &str) -> &'static str {
-    let income_keywords = ["工资", "收入", "收到", "入账", "奖金", "到账", "发薪", "退款"];
+    let income_keywords = [
+        "工资", "收入", "收到", "入账", "奖金", "到账", "发薪", "退款",
+    ];
     if income_keywords.iter().any(|k| text.contains(k)) {
         "income"
     } else {
@@ -419,9 +426,33 @@ fn is_chinese_num_char(c: char) -> bool {
     matches!(
         c,
         '零' | '〇'
-            | '一' | '二' | '两' | '三' | '四' | '五' | '六' | '七' | '八' | '九'
-            | '壹' | '贰' | '叁' | '肆' | '伍' | '陆' | '柒' | '捌' | '玖'
-            | '十' | '拾' | '百' | '佰' | '千' | '仟' | '万' | '萬'
+            | '一'
+            | '二'
+            | '两'
+            | '三'
+            | '四'
+            | '五'
+            | '六'
+            | '七'
+            | '八'
+            | '九'
+            | '壹'
+            | '贰'
+            | '叁'
+            | '肆'
+            | '伍'
+            | '陆'
+            | '柒'
+            | '捌'
+            | '玖'
+            | '十'
+            | '拾'
+            | '百'
+            | '佰'
+            | '千'
+            | '仟'
+            | '万'
+            | '萬'
     )
 }
 
@@ -483,7 +514,11 @@ fn chinese_to_number(text: &str) -> Option<f64> {
     }
 
     let val = total + section + number;
-    if val > 0.0 { Some(val) } else { None }
+    if val > 0.0 {
+        Some(val)
+    } else {
+        None
+    }
 }
 
 fn scan_ascii_numbers(text: &str) -> Vec<f64> {
@@ -559,8 +594,14 @@ fn parse_date(value: &str) -> Option<NaiveDate> {
 
 fn detect_category_name(text: &str, tx_type: &str) -> Option<String> {
     let rules: HashMap<&str, &str> = [
-        ("餐饮", "餐饮|午饭|午餐|晚饭|晚餐|早餐|吃饭|外卖|咖啡|奶茶|火锅|烧烤|包子|馒头|饺子"),
-        ("交通", "交通|地铁|公交|打车|滴滴|出租|高铁|火车|机票|加油|停车"),
+        (
+            "餐饮",
+            "餐饮|午饭|午餐|晚饭|晚餐|早餐|吃饭|外卖|咖啡|奶茶|火锅|烧烤|包子|馒头|饺子",
+        ),
+        (
+            "交通",
+            "交通|地铁|公交|打车|滴滴|出租|高铁|火车|机票|加油|停车",
+        ),
         ("购物", "购物|淘宝|京东|拼多多|买|超市|商场|衣服|鞋"),
         ("住房", "住房|房租|租金|物业|水电|燃气|房贷"),
         ("娱乐", "娱乐|电影|游戏|KTV|旅游|旅行|门票"),
@@ -615,16 +656,16 @@ fn resolve_category_id(
     tx_type: &str,
     categories: &[Category],
 ) -> Option<i64> {
-    let typed: Vec<&Category> = categories
-        .iter()
-        .filter(|c| c.r#type == tx_type)
-        .collect();
+    let typed: Vec<&Category> = categories.iter().filter(|c| c.r#type == tx_type).collect();
 
     if let Some(name) = name {
         if let Some(cat) = typed.iter().find(|c| c.name == name) {
             return Some(cat.id);
         }
-        if let Some(cat) = typed.iter().find(|c| name.contains(&c.name) || c.name.contains(name)) {
+        if let Some(cat) = typed
+            .iter()
+            .find(|c| name.contains(&c.name) || c.name.contains(name))
+        {
             return Some(cat.id);
         }
     }

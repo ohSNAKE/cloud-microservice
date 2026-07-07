@@ -25,7 +25,11 @@ async fn live_fetch_stock_kline() {
         .expect("fetch stock kline");
     assert!(!bars.is_empty(), "kline should not be empty");
     assert!(bars[0].close > 0.0);
-    println!("kline bars: {}, latest: {}", bars.len(), bars.last().unwrap().date);
+    println!(
+        "kline bars: {}, latest: {}",
+        bars.len(),
+        bars.last().unwrap().date
+    );
 }
 
 #[tokio::test]
@@ -34,7 +38,11 @@ async fn live_fetch_fund_kline() {
         .await
         .expect("fetch fund history");
     assert!(!bars.is_empty(), "fund history should not be empty");
-    println!("fund bars: {}, latest nav: {}", bars.len(), bars.last().unwrap().close);
+    println!(
+        "fund bars: {}, latest nav: {}",
+        bars.len(),
+        bars.last().unwrap().close
+    );
 }
 
 #[tokio::test]

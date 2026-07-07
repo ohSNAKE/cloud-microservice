@@ -938,3 +938,122 @@ body,
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
+
+/* ── Quant alerts ── */
+.quant-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.quant-status-grid > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quant-target-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.quant-target-card {
+  height: 100%;
+}
+
+.quant-target-card .ant-card-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 16px !important;
+}
+
+.quant-target-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.quant-target-card__name {
+  display: block;
+  max-width: 180px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.quant-target-card__code {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.quant-target-card__price {
+  margin-top: 16px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.quant-target-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-muted-surface);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.quant-target-card__meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quant-signal-buy {
+  color: var(--color-expense) !important;
+  background: color-mix(in srgb, var(--color-expense) 10%, transparent) !important;
+}
+
+.quant-signal-sell {
+  color: var(--color-income) !important;
+  background: color-mix(in srgb, var(--color-income) 10%, transparent) !important;
+}
+
+.quant-signal-watch {
+  color: var(--color-text-secondary) !important;
+  background: var(--color-muted-surface) !important;
+}
+
+.quant-signal-error {
+  color: #c2410c !important;
+  background: rgba(194, 65, 12, 0.1) !important;
+}
+
+@media (max-width: 1180px) {
+  .quant-target-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .quant-status-grid,
+  .quant-target-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quant-target-card__meta {
+    grid-template-columns: 1fr;
+  }
+}
