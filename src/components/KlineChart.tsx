@@ -5,9 +5,11 @@ import { api } from "../api";
 import type { ChartColors } from "../constants/chartTheme";
 import { useTheme } from "../context/ThemeContext";
 import type { Holding, KlineBar, KlinePeriod } from "../types";
+import { buildIntradayOption, type IntradayWindows } from "./intradayChartOption";
 
 interface KlineChartProps {
   holding: Holding;
+  intradayWindows?: IntradayWindows;
 }
 
 function formatVolume(value: number) {
@@ -133,7 +135,7 @@ function buildLineOption(bars: KlineBar[], costPrice: number, colors: ChartColor
   };
 }
 
-export default function KlineChart({ holding }: KlineChartProps) {
+export default function KlineChart({ holding, intradayWindows }: KlineChartProps) {
   const { chartColors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<KlinePeriod>("day");
@@ -166,10 +168,13 @@ export default function KlineChart({ holding }: KlineChartProps) {
 
   const option = useMemo(() => {
     if (bars.length === 0) return {};
+    if (holding.type === "stock" && period === "5m") {
+      return buildIntradayOption(bars, chartColors, intradayWindows);
+    }
     return chartType === "candlestick"
       ? buildCandlestickOption(bars, holding.cost_price, chartColors)
       : buildLineOption(bars, holding.cost_price, chartColors);
-  }, [bars, chartType, holding.cost_price, chartColors]);
+  }, [bars, chartType, holding.cost_price, holding.type, period, chartColors, intradayWindows]);
 
   if (loading) {
     return (
@@ -179,7 +184,7 @@ export default function KlineChart({ holding }: KlineChartProps) {
     );
   }
 
-  if (bars.length === 0) {
+  if (bars.length === 0 || option === null) {
     return <div style={{ textAlign: "center", padding: 80, color: chartColors.textMuted }}>暂无行情数据</div>;
   }
 
@@ -193,6 +198,7 @@ export default function KlineChart({ holding }: KlineChartProps) {
           optionType="button"
           buttonStyle="solid"
           options={[
+            { label: "分时", value: "5m" },
             { label: "日K", value: "day" },
             { label: "周K", value: "week" },
             { label: "月K", value: "month" },
