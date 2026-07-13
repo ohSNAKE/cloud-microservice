@@ -6,6 +6,7 @@ import {
   Card,
   Form,
   Input,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -18,14 +19,18 @@ import {
 import {
   BellOutlined,
   DeleteOutlined,
+  LineChartOutlined,
   PlusOutlined,
   SyncOutlined,
 } from "@ant-design/icons";
 import { api, formatInvokeError, formatMoney } from "../api";
+import KlineChart from "../components/KlineChart";
 import EmptyPlaceholder from "../components/layout/EmptyPlaceholder";
 import PageHeader from "../components/layout/PageHeader";
 import PageLoader from "../components/layout/PageLoader";
 import { notifyGeneratedQuantSignals } from "../utils/quantNotifications";
+import { targetToKlineChartInput } from "./quantKlineInput";
+import type { KlineChartInput } from "./quantKlineInput";
 import type {
   NewQuantWatchlistItem,
   QuantDashboard,
@@ -113,6 +118,7 @@ export default function QuantAlertsPage() {
   const [notificationWarning, setNotificationWarning] = useState<string | null>(null);
   const [addingWatchlist, setAddingWatchlist] = useState(false);
   const [updatingTargetKey, setUpdatingTargetKey] = useState<string | null>(null);
+  const [klineChartInput, setKlineChartInput] = useState<KlineChartInput | null>(null);
   const [codeFilterInput, setCodeFilterInput] = useState("");
   const [nextRefreshAt, setNextRefreshAt] = useState<Date | null>(null);
   const [addForm] = Form.useForm<WatchlistFormValues>();
@@ -411,9 +417,19 @@ export default function QuantAlertsPage() {
                       {target.code} · {target.market}
                     </span>
                   </div>
-                  <Tag bordered={false} className={outputClasses[target.output_state]}>
-                    {outputLabels[target.output_state]}
-                  </Tag>
+                  <Space size={6} align="start">
+                    <Tooltip title="查看K线">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<LineChartOutlined />}
+                        onClick={() => setKlineChartInput(targetToKlineChartInput(target))}
+                      />
+                    </Tooltip>
+                    <Tag bordered={false} className={outputClasses[target.output_state]}>
+                      {outputLabels[target.output_state]}
+                    </Tag>
+                  </Space>
                 </div>
 
                 <div className="quant-target-card__price">{displayPrice(target.current_price)}</div>
@@ -597,6 +613,25 @@ export default function QuantAlertsPage() {
           ]}
         />
       </Card>
+      <Modal
+        title={
+          klineChartInput
+            ? `${klineChartInput.holding.name}（${klineChartInput.holding.code}）K线`
+            : "K线"
+        }
+        open={!!klineChartInput}
+        onCancel={() => setKlineChartInput(null)}
+        footer={null}
+        width={960}
+        destroyOnClose
+      >
+        {klineChartInput && (
+          <KlineChart
+            holding={klineChartInput.holding}
+            intradayWindows={klineChartInput.intradayWindows}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
