@@ -352,8 +352,11 @@ export interface QuantTarget {
   ma_short: number | null;
   ma_long: number | null;
   grid_zones: QuantGridZone[];
+  intraday_position: number | null;
+  intraday_reason: string | null;
   intraday_high_frequency_windows: QuantTimeBucket[];
   intraday_low_frequency_windows: QuantTimeBucket[];
+  has_sold_t_today: boolean;
   latest_signal: QuantSignal | null;
   last_error: string | null;
 }
