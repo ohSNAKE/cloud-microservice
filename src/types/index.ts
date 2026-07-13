@@ -271,9 +271,17 @@ export interface PortfolioHistoryPoint {
   total_value: number;
 }
 
+export type QuantStrategyMode = "auto_grid" | "intraday_t";
 export type QuantDirection = "buy_attention" | "sell_attention";
 export type QuantTrendState = "bullish" | "bearish" | "neutral" | "insufficient_data";
 export type QuantOutputState = QuantDirection | "watch" | "quote_error";
+export type QuantTimeBucket =
+  | "09:30-09:45"
+  | "09:50-10:30"
+  | "10:35-11:30"
+  | "13:00-13:30"
+  | "13:35-14:30"
+  | "14:35-15:00";
 export type QuantTriggerZone = "buy_1" | "buy_2" | "sell_1" | "sell_2";
 
 export interface QuantWatchlistItem {
@@ -333,6 +341,7 @@ export interface QuantTarget {
   name: string;
   market: string;
   source: "holding" | "watchlist" | "holding_watchlist";
+  strategy_mode: QuantStrategyMode;
   enabled: boolean;
   desktop_notification_enabled: boolean;
   current_price: number | null;
@@ -343,6 +352,8 @@ export interface QuantTarget {
   ma_short: number | null;
   ma_long: number | null;
   grid_zones: QuantGridZone[];
+  intraday_high_frequency_windows: QuantTimeBucket[];
+  intraday_low_frequency_windows: QuantTimeBucket[];
   latest_signal: QuantSignal | null;
   last_error: string | null;
 }
