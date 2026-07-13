@@ -13,6 +13,7 @@
     "icon:brand": "python3 scripts/generate-icon.py && cp assets/app-icon-source.png public/app-logo.png && npm run icon:gen",
     "icon:prep": "python3 scripts/prepare-app-icon.py assets/app-icon-source.png assets/app-icon-source.png",
     "icon:set": "bash scripts/set-app-icon.sh",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -34,6 +35,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^3.2.4"
   }
 }
