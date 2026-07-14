@@ -12,6 +12,21 @@ interface KlineChartProps {
   intradayWindows?: IntradayWindows;
 }
 
+export const stockKlinePeriodOptions: Array<{ label: string; value: KlinePeriod }> = [
+  { label: "分时", value: "1m" },
+  { label: "日K", value: "day" },
+  { label: "周K", value: "week" },
+  { label: "月K", value: "month" },
+];
+
+export function getStockKlineDisplayConfig(period: KlinePeriod) {
+  return {
+    period,
+    limit: period === "1m" ? 500 : 120,
+    isIntraday: period === "1m",
+  };
+}
+
 function formatVolume(value: number) {
   if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(2)}亿`;
   if (value >= 10_000) return `${(value / 10_000).toFixed(2)}万`;
@@ -141,6 +156,7 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
   const [period, setPeriod] = useState<KlinePeriod>("day");
   const [bars, setBars] = useState<KlineBar[]>([]);
   const [chartType, setChartType] = useState<"candlestick" | "line">("candlestick");
+  const stockKlineConfig = getStockKlineDisplayConfig(period);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,8 +166,8 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
         const data = await api.getKlineData(
           holding.code,
           holding.type,
-          holding.type === "stock" ? period : undefined,
-          holding.type === "stock" && period === "1m" ? 500 : 120,
+          holding.type === "stock" ? stockKlineConfig.period : undefined,
+          holding.type === "stock" ? stockKlineConfig.limit : 120,
         );
         if (!cancelled) {
           setBars(data.bars);
@@ -168,7 +184,7 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
 
   const option = useMemo(() => {
     if (bars.length === 0) return {};
-    if (holding.type === "stock" && period === "1m") {
+    if (holding.type === "stock" && stockKlineConfig.isIntraday) {
       return buildIntradayOption(bars, chartColors, intradayWindows);
     }
     return chartType === "candlestick"
@@ -197,12 +213,7 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
           style={{ marginBottom: 12 }}
           optionType="button"
           buttonStyle="solid"
-          options={[
-            { label: "分时", value: "1m" },
-            { label: "日K", value: "day" },
-            { label: "周K", value: "week" },
-            { label: "月K", value: "month" },
-          ]}
+          options={stockKlinePeriodOptions}
         />
       )}
       {holding.type === "fund" && (
