@@ -754,6 +754,31 @@ pub fn build_quant_dashboard_with_snapshots(
             Some(existing) if existing == settings.poll_interval_seconds => Some(existing),
             Some(_) => Some(60),
         };
+        let intraday_stats = if settings.strategy_mode == "intraday_t" {
+            target.strategy_mode = "intraday_t".to_string();
+            target.grid_zones = vec![];
+
+            let minute_bars = match &snapshot.minute_bars {
+                Ok(bars) => bars,
+                Err(err) => {
+                    target.output_state = "quote_error".to_string();
+                    target.last_error = Some(err.clone());
+                    continue;
+                }
+            };
+            let stats = analyze_intraday_t_windows(
+                minute_bars,
+                &current_date,
+                settings.intraday_lookback_days,
+                settings.intraday_high_time_min_count,
+                settings.intraday_low_time_min_count,
+            );
+            target.intraday_high_frequency_windows = stats.high_frequency_windows.clone();
+            target.intraday_low_frequency_windows = stats.low_frequency_windows.clone();
+            Some(stats)
+        } else {
+            None
+        };
         let bars = match &snapshot.daily_bars {
             Ok(bars) => completed_daily_bars(bars, now),
             Err(err) => {
@@ -792,26 +817,11 @@ pub fn build_quant_dashboard_with_snapshots(
         target.ma_long = trend.ma_long;
 
         if settings.strategy_mode == "intraday_t" {
-            target.strategy_mode = "intraday_t".to_string();
-            target.grid_zones = vec![];
-
-            let minute_bars = match &snapshot.minute_bars {
-                Ok(bars) => bars,
-                Err(err) => {
-                    target.output_state = "quote_error".to_string();
-                    target.last_error = Some(err.clone());
-                    continue;
-                }
-            };
-            let stats = analyze_intraday_t_windows(
-                minute_bars,
-                &current_date,
-                settings.intraday_lookback_days,
-                settings.intraday_high_time_min_count,
-                settings.intraday_low_time_min_count,
-            );
-            target.intraday_high_frequency_windows = stats.high_frequency_windows.clone();
-            target.intraday_low_frequency_windows = stats.low_frequency_windows.clone();
+            let stats = intraday_stats.expect("intraday targets analyze minute history first");
+            let minute_bars = snapshot
+                .minute_bars
+                .as_ref()
+                .expect("intraday targets require successful minute history");
             let completed_minute_bars = completed_intraday_bars(minute_bars, now);
             target.intraday_position = intraday_t_day_position(
                 &completed_minute_bars,
@@ -1052,25 +1062,11 @@ fn refresh_quant_signals_with_snapshots(
     })
 }
 
-fn should_fetch_intraday_minute_bars(
-    strategy_mode: &str,
-    realtime_quote: &Result<RealtimeStockQuote, String>,
-    now: chrono::DateTime<chrono::FixedOffset>,
-) -> bool {
-    if strategy_mode != "intraday_t" {
-        return false;
-    }
-
-    match realtime_quote {
-        Ok(quote) => quote_is_intraday_t_realtime(quote, now),
-        Err(_) => false,
-    }
+fn should_fetch_intraday_minute_bars(strategy_mode: &str) -> bool {
+    strategy_mode == "intraday_t"
 }
 
-async fn load_live_quant_snapshots(
-    state: &State<'_, AppState>,
-    now: chrono::DateTime<chrono::FixedOffset>,
-) -> Result<Vec<QuantMarketSnapshot>, String> {
+async fn load_live_quant_snapshots(state: &State<'_, AppState>) -> Result<Vec<QuantMarketSnapshot>, String> {
     let requests = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let targets = merge_quant_targets_read_only(&conn)?;
@@ -1096,21 +1092,15 @@ async fn load_live_quant_snapshots(
     };
 
     Ok(
-        fetch_quant_snapshots_concurrently(requests, move |request| {
-            fetch_live_quant_snapshot(request, now)
-        })
-        .await,
+        fetch_quant_snapshots_concurrently(requests, fetch_live_quant_snapshot).await,
     )
 }
 
-async fn fetch_live_quant_snapshot(
-    request: QuantSnapshotRequest,
-    now: chrono::DateTime<chrono::FixedOffset>,
-) -> QuantMarketSnapshot {
+async fn fetch_live_quant_snapshot(request: QuantSnapshotRequest) -> QuantMarketSnapshot {
     let daily_bars = fetch_stock_kline(&request.code, "day", request.daily_limit).await;
     let realtime_quote = fetch_stock_realtime_quote(&request.code, &request.market).await;
     let minute_bars = match request.minute_limit {
-        Some(limit) if should_fetch_intraday_minute_bars("intraday_t", &realtime_quote, now) => {
+        Some(limit) if should_fetch_intraday_minute_bars("intraday_t") => {
             fetch_stock_kline(&request.code, "5m", limit).await
         }
         _ => Ok(vec![]),
@@ -1265,8 +1255,7 @@ pub fn list_quant_signals(
 
 #[tauri::command]
 pub async fn get_quant_dashboard(state: State<'_, AppState>) -> Result<QuantDashboard, String> {
-    let snapshot_now = china_market_now();
-    let snapshots = load_live_quant_snapshots(&state, snapshot_now).await?;
+    let snapshots = load_live_quant_snapshots(&state).await?;
     let now = china_market_now();
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     build_quant_dashboard_with_snapshots(&conn, snapshots, now)
@@ -1276,8 +1265,7 @@ pub async fn get_quant_dashboard(state: State<'_, AppState>) -> Result<QuantDash
 pub async fn refresh_quant_signals(
     state: State<'_, AppState>,
 ) -> Result<QuantRefreshResult, String> {
-    let snapshot_now = china_market_now();
-    let snapshots = load_live_quant_snapshots(&state, snapshot_now).await?;
+    let snapshots = load_live_quant_snapshots(&state).await?;
     let now = china_market_now();
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     refresh_quant_signals_with_snapshots(&conn, &snapshots, now)
@@ -2263,6 +2251,75 @@ mod tests {
     }
 
     #[test]
+    fn intraday_t_dashboard_keeps_windows_when_quote_is_stale() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000122", "Stale Windows", "cn", true);
+        insert_intraday_settings(&conn, "000122");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![QuantMarketSnapshot {
+                code: "000122".to_string(),
+                market: "cn".to_string(),
+                daily_bars: Ok(bullish_daily_bars()),
+                minute_bars: Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                realtime_quote: Ok(realtime_quote_with_status(
+                    11.6,
+                    Some(exchange_timestamp(2026, 7, 6, 9, 35, 0)),
+                    Some("5"),
+                )),
+            }],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "quote_error");
+        assert!(target
+            .intraday_high_frequency_windows
+            .contains(&"09:30-09:45".to_string()));
+        assert!(target
+            .intraday_low_frequency_windows
+            .contains(&"13:35-14:30".to_string()));
+    }
+
+    #[test]
+    fn intraday_t_dashboard_keeps_windows_when_daily_history_fails() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000123", "Daily Failure Windows", "cn", true);
+        insert_intraday_settings(&conn, "000123");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![QuantMarketSnapshot {
+                code: "000123".to_string(),
+                market: "cn".to_string(),
+                daily_bars: Err("daily history failed".to_string()),
+                minute_bars: Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                realtime_quote: Ok(realtime_quote_with_status(
+                    11.6,
+                    Some(now.timestamp()),
+                    Some("5"),
+                )),
+            }],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "quote_error");
+        assert_eq!(target.last_error.as_deref(), Some("daily history failed"));
+        assert!(target
+            .intraday_high_frequency_windows
+            .contains(&"09:30-09:45".to_string()));
+        assert!(target
+            .intraday_low_frequency_windows
+            .contains(&"13:35-14:30".to_string()));
+    }
+
+    #[test]
     fn intraday_t_dashboard_requires_persisted_sale_before_buyback() {
         let conn = test_conn();
         insert_watchlist(&conn, "000108", "Guarded Buyback", "cn", true);
@@ -2828,42 +2885,9 @@ mod tests {
     }
 
     #[test]
-    fn intraday_t_minute_fetch_requires_strict_realtime_quote() {
-        let now = cn_datetime(2026, 7, 7, 9, 35, 0);
-
-        assert!(!should_fetch_intraday_minute_bars(
-            "intraday_t",
-            &Ok(realtime_quote_with_status(11.6, None, Some("交易中"))),
-            now,
-        ));
-        assert!(should_fetch_intraday_minute_bars(
-            "intraday_t",
-            &Ok(realtime_quote_with_status(
-                11.6,
-                Some(now.timestamp()),
-                Some("交易中"),
-            )),
-            now,
-        ));
-        assert!(!should_fetch_intraday_minute_bars(
-            "auto_grid",
-            &Ok(realtime_quote_with_status(11.6, None, Some("交易中"))),
-            now,
-        ));
-        assert!(!should_fetch_intraday_minute_bars(
-            "intraday_t",
-            &Ok(realtime_quote_with_status(
-                11.6,
-                Some(exchange_timestamp(2026, 7, 6, 9, 35, 0)),
-                Some("5"),
-            )),
-            now,
-        ));
-        assert!(!should_fetch_intraday_minute_bars(
-            "intraday_t",
-            &Err("quote failed".to_string()),
-            now,
-        ));
+    fn intraday_t_minute_fetch_does_not_require_a_realtime_quote() {
+        assert!(should_fetch_intraday_minute_bars("intraday_t"));
+        assert!(!should_fetch_intraday_minute_bars("auto_grid"));
     }
 
     #[test]
