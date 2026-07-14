@@ -438,4 +438,19 @@ mod tests {
         }
     }
 
+    #[test]
+    fn stock_kline_fetcher_returns_first_eastmoney_error_without_fallback() {
+        let mut calls = Vec::new();
+        let err = fetch_stock_kline_with_getter("002796", "day", 2, |url| {
+            calls.push(url.to_string());
+            Err("first EastMoney request failed".to_string())
+        })
+        .expect_err("the first EastMoney request should be returned without fallback");
+
+        assert_eq!(err, "first EastMoney request failed");
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].contains("push2his.eastmoney.com"));
+        assert!(calls[0].contains("klt=101"));
+    }
+
 }
