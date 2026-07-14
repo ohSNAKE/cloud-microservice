@@ -151,7 +151,7 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
           holding.code,
           holding.type,
           holding.type === "stock" ? period : undefined,
-          120,
+          holding.type === "stock" && period === "1m" ? 500 : 120,
         );
         if (!cancelled) {
           setBars(data.bars);
@@ -168,7 +168,7 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
 
   const option = useMemo(() => {
     if (bars.length === 0) return {};
-    if (holding.type === "stock" && period === "5m") {
+    if (holding.type === "stock" && period === "1m") {
       return buildIntradayOption(bars, chartColors, intradayWindows);
     }
     return chartType === "candlestick"
@@ -198,7 +198,7 @@ export default function KlineChart({ holding, intradayWindows }: KlineChartProps
           optionType="button"
           buttonStyle="solid"
           options={[
-            { label: "分时", value: "5m" },
+            { label: "分时", value: "1m" },
             { label: "日K", value: "day" },
             { label: "周K", value: "week" },
             { label: "月K", value: "month" },

@@ -167,6 +167,7 @@ pub async fn lookup_stock_name(code: &str) -> Result<String, String> {
 
 fn kline_period_code(period: &str) -> i32 {
     match period {
+        "1m" | "1min" => 1,
         "5m" | "5min" => 5,
         "week" => 102,
         "month" => 103,
@@ -416,8 +417,20 @@ mod tests {
     }
 
     #[test]
+    fn stock_kline_period_supports_one_minute() {
+        assert_eq!(kline_period_code("1m"), 1);
+        assert_eq!(kline_period_code("1min"), 1);
+    }
+
+    #[test]
     fn stock_kline_fetcher_uses_eastmoney_for_supported_periods() {
-        for (period, klt) in [("day", 101), ("week", 102), ("month", 103), ("5m", 5)] {
+        for (period, klt) in [
+            ("day", 101),
+            ("week", 102),
+            ("month", 103),
+            ("1m", 1),
+            ("5m", 5),
+        ] {
             let mut calls = Vec::new();
             let bars = fetch_stock_kline_with_getter("002796", period, 2, |url| {
                 calls.push(url.to_string());

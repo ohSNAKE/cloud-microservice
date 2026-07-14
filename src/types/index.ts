@@ -204,7 +204,7 @@ export interface KlineData {
   chart_type: "candlestick" | "line";
 }
 
-export type KlinePeriod = "5m" | "day" | "week" | "month";
+export type KlinePeriod = "1m" | "5m" | "day" | "week" | "month";
 
 export interface Budget {
   id: number;
