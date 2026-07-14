@@ -611,7 +611,13 @@ fn update_quant_strategy_settings_in_conn(
     )
     .map_err(|e| e.to_string())?;
 
-    quant_target_from_candidate(conn, candidate)
+    let mut target = quant_target_from_candidate(conn, candidate)?;
+    set_intraday_t_state_for_date(
+        conn,
+        std::slice::from_mut(&mut target),
+        &china_market_now().format("%Y-%m-%d").to_string(),
+    )?;
+    Ok(target)
 }
 
 fn quant_watchlist_from_row(row: &rusqlite::Row) -> rusqlite::Result<QuantWatchlistItem> {
@@ -3467,6 +3473,34 @@ mod tests {
             )
             .unwrap();
         assert_eq!(stored_mode, "intraday_t");
+    }
+
+    #[test]
+    fn update_settings_returns_persisted_same_day_intraday_t_sale_state() {
+        let conn = test_conn();
+        let code = "000019";
+        insert_watchlist(&conn, code, "Update T State", "cn", true);
+        let trading_date = china_market_now().format("%Y-%m-%d").to_string();
+        conn.execute(
+            "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+             VALUES (?1, 'cn', ?2, ?3)",
+            params![code, trading_date, format!("{trading_date} 10:00:00")],
+        )
+        .unwrap();
+
+        let target = update_quant_strategy_settings_in_conn(
+            &conn,
+            code.to_string(),
+            "cn".to_string(),
+            QuantStrategySettingsUpdate {
+                enabled: true,
+                desktop_notification_enabled: true,
+                strategy_mode: Some("intraday_t".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert!(target.has_sold_t_today);
     }
 
     #[test]
