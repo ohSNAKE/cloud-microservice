@@ -35,9 +35,11 @@ import type {
   NewQuantWatchlistItem,
   QuantDashboard,
   QuantDirection,
+  QuantGridTriggerZone,
   QuantOutputState,
   QuantSignal,
   QuantSignalFilter,
+  QuantStrategyMode,
   QuantTarget,
   QuantTriggerZone,
   QuantWatchlistItem,
@@ -49,6 +51,9 @@ const DEFAULT_SIGNAL_FILTER: QuantSignalFilter = { limit: 100 };
 const outputLabels: Record<QuantOutputState, string> = {
   buy_attention: "买入关注",
   sell_attention: "卖出关注",
+  sell_t_attention: "卖T关注",
+  buyback_attention: "买回关注",
+  sell_t_watch: "早盘冲高预警",
   watch: "观望",
   quote_error: "行情异常",
 };
@@ -56,6 +61,9 @@ const outputLabels: Record<QuantOutputState, string> = {
 const outputClasses: Record<QuantOutputState, string> = {
   buy_attention: "quant-signal-buy",
   sell_attention: "quant-signal-sell",
+  sell_t_attention: "quant-signal-sell",
+  buyback_attention: "quant-signal-buy",
+  sell_t_watch: "quant-signal-watch",
   watch: "quant-signal-watch",
   quote_error: "quant-signal-error",
 };
@@ -63,9 +71,11 @@ const outputClasses: Record<QuantOutputState, string> = {
 const directionLabels: Record<QuantDirection, string> = {
   buy_attention: "买入关注",
   sell_attention: "卖出关注",
+  sell_t_attention: "卖T关注",
+  buyback_attention: "买回关注",
 };
 
-const triggerZoneLabels: Record<QuantTriggerZone, string> = {
+const triggerZoneLabels: Record<QuantGridTriggerZone, string> = {
   buy_1: "买一区",
   buy_2: "买二区",
   sell_1: "卖一区",
@@ -103,7 +113,16 @@ function displayPrice(value: number | null) {
 }
 
 function sourceLabel(source: QuantSignal["source"]) {
-  return source === "auto_grid" ? "自动网格" : source;
+  return source === "auto_grid" ? "自动网格" : "做T";
+}
+
+function isGridTriggerZone(value: QuantTriggerZone): value is QuantGridTriggerZone {
+  return value in triggerZoneLabels;
+}
+
+function triggerZoneLabel(value: QuantTriggerZone | null) {
+  if (!value) return "--";
+  return isGridTriggerZone(value) ? triggerZoneLabels[value] : value;
 }
 
 export default function QuantAlertsPage() {
@@ -242,7 +261,11 @@ export default function QuantAlertsPage() {
 
   const updateTargetSettings = async (
     target: QuantTarget,
-    nextSettings: { enabled: boolean; desktop_notification_enabled: boolean },
+    nextSettings: {
+      enabled: boolean;
+      desktop_notification_enabled: boolean;
+      strategy_mode?: QuantStrategyMode;
+    },
   ) => {
     const targetKey = `${target.market}:${target.code}`;
     setUpdatingTargetKey(targetKey);
@@ -250,7 +273,10 @@ export default function QuantAlertsPage() {
       const updatedTarget = await api.updateQuantStrategySettings(
         target.code,
         target.market,
-        nextSettings,
+        {
+          ...nextSettings,
+          strategy_mode: nextSettings.strategy_mode ?? target.strategy_mode,
+        },
       );
       setDashboard((current) =>
         current
@@ -308,6 +334,25 @@ export default function QuantAlertsPage() {
       await loadDashboardAndWatchlist();
     } catch (error) {
       message.error(formatInvokeError(error));
+    }
+  };
+
+  const updateIntradayTSoldState = async (target: QuantTarget) => {
+    const targetKey = `${target.market}:${target.code}`;
+    setUpdatingTargetKey(targetKey);
+    try {
+      if (target.has_sold_t_today) {
+        await api.clearIntradayTSold(target.code, target.market);
+        message.success("已取消当天T仓卖出记录");
+      } else {
+        await api.markIntradayTSold(target.code, target.market);
+        message.success("已记录当天T仓卖出");
+      }
+      await loadDashboardAndWatchlist();
+    } catch (error) {
+      message.error(formatInvokeError(error));
+    } finally {
+      if (mountedRef.current) setUpdatingTargetKey(null);
     }
   };
 
@@ -436,7 +481,28 @@ export default function QuantAlertsPage() {
 
                 <div className="quant-target-card__meta">
                   <span>趋势：{trendLabels[target.trend_state]}</span>
-                  <span>触发区：{target.current_trigger_zone ? triggerZoneLabels[target.current_trigger_zone] : "--"}</span>
+                  {target.strategy_mode === "intraday_t" ? (
+                    <>
+                      <span>
+                        日内位置：
+                        {target.intraday_position === null
+                          ? "--"
+                          : `${Math.round(target.intraday_position * 100)}%`}
+                      </span>
+                      <span>
+                        卖T窗口：{target.intraday_high_frequency_windows.join("、") || "--"}
+                      </span>
+                       <span>
+                         买回窗口：{target.intraday_low_frequency_windows.join("、") || "--"}
+                       </span>
+                       <span>
+                         T仓状态：{target.has_sold_t_today ? "已记录卖出" : "未记录卖出"}
+                       </span>
+                       <span>理由：{target.intraday_reason ?? "--"}</span>
+                    </>
+                  ) : (
+                    <span>触发区：{triggerZoneLabel(target.current_trigger_zone)}</span>
+                  )}
                   <span>触发：{formatDateTime(target.latest_signal?.triggered_at)}</span>
                   <span>行情：{formatDateTime(target.quote_fetched_at)}</span>
                 </div>
@@ -451,8 +517,28 @@ export default function QuantAlertsPage() {
                 )}
 
                 <Space size="large" wrap style={{ marginTop: 14 }}>
+                  <Space size={6} wrap>
+                    <Typography.Text type="secondary">模式</Typography.Text>
+                    <Select<QuantStrategyMode>
+                      size="small"
+                      value={target.strategy_mode}
+                      style={{ width: 96 }}
+                      disabled={updatingTargetKey === targetKey}
+                      onChange={(value) =>
+                        void updateTargetSettings(target, {
+                          enabled: target.enabled,
+                          desktop_notification_enabled: target.desktop_notification_enabled,
+                          strategy_mode: value,
+                        })
+                      }
+                      options={[
+                        { label: "自动网格", value: "auto_grid" },
+                        { label: "做T", value: "intraday_t" },
+                      ]}
+                    />
+                  </Space>
                   <Space size={6}>
-                    <Typography.Text type="secondary">策略</Typography.Text>
+                    <Typography.Text type="secondary">启用</Typography.Text>
                     <Switch
                       size="small"
                       checked={target.enabled}
@@ -461,6 +547,7 @@ export default function QuantAlertsPage() {
                         void updateTargetSettings(target, {
                           enabled: next,
                           desktop_notification_enabled: target.desktop_notification_enabled,
+                          strategy_mode: target.strategy_mode,
                         })
                       }
                     />
@@ -476,10 +563,29 @@ export default function QuantAlertsPage() {
                         void updateTargetSettings(target, {
                           enabled: target.enabled,
                           desktop_notification_enabled: next,
+                          strategy_mode: target.strategy_mode,
                         })
                       }
                     />
                   </Space>
+                  {target.strategy_mode === "intraday_t" && (
+                    <Space size={6} wrap>
+                      <Button
+                        size="small"
+                        type={target.has_sold_t_today ? "default" : "primary"}
+                        disabled={
+                          !dashboard?.is_trading_time || updatingTargetKey === targetKey
+                        }
+                        loading={updatingTargetKey === targetKey}
+                        onClick={() => void updateIntradayTSoldState(target)}
+                      >
+                        {target.has_sold_t_today ? "取消记录" : "已卖出T仓"}
+                      </Button>
+                      <Typography.Text type="secondary">
+                        仅记录提醒前提，不会执行或核验券商委托
+                      </Typography.Text>
+                    </Space>
+                  )}
                 </Space>
               </Card>
             );
@@ -573,6 +679,8 @@ export default function QuantAlertsPage() {
               { label: "全部", value: "all" },
               { label: "买入关注", value: "buy_attention" },
               { label: "卖出关注", value: "sell_attention" },
+              { label: "卖T关注", value: "sell_t_attention" },
+              { label: "买回关注", value: "buyback_attention" },
             ]}
           />
         </div>
@@ -595,9 +703,7 @@ export default function QuantAlertsPage() {
               render: (value: QuantDirection) => (
                 <Tag
                   bordered={false}
-                  className={
-                    value === "buy_attention" ? "quant-signal-buy" : "quant-signal-sell"
-                  }
+                  className={outputClasses[value]}
                 >
                   {directionLabels[value]}
                 </Tag>
@@ -608,11 +714,12 @@ export default function QuantAlertsPage() {
             {
               title: "触发区",
               dataIndex: "trigger_zone",
-              render: (value: QuantTriggerZone) => triggerZoneLabels[value],
+              render: (value: QuantTriggerZone) => triggerZoneLabel(value),
             },
           ]}
         />
       </Card>
+
       <Modal
         title={
           klineChartInput

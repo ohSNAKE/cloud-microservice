@@ -272,9 +272,14 @@ export interface PortfolioHistoryPoint {
 }
 
 export type QuantStrategyMode = "auto_grid" | "intraday_t";
-export type QuantDirection = "buy_attention" | "sell_attention";
+export type QuantGridDirection = "buy_attention" | "sell_attention";
+export type QuantDirection =
+  | QuantGridDirection
+  | "sell_t_attention"
+  | "buyback_attention";
 export type QuantTrendState = "bullish" | "bearish" | "neutral" | "insufficient_data";
-export type QuantOutputState = QuantDirection | "watch" | "quote_error";
+export type QuantOutputState = QuantDirection | "sell_t_watch" | "watch" | "quote_error";
+export type QuantGridTriggerZone = "buy_1" | "buy_2" | "sell_1" | "sell_2";
 export type QuantTimeBucket =
   | "09:30-09:45"
   | "09:50-10:30"
@@ -282,7 +287,7 @@ export type QuantTimeBucket =
   | "13:00-13:30"
   | "13:35-14:30"
   | "14:35-15:00";
-export type QuantTriggerZone = "buy_1" | "buy_2" | "sell_1" | "sell_2";
+export type QuantTriggerZone = QuantGridTriggerZone | QuantTimeBucket;
 
 export interface QuantWatchlistItem {
   id: number;
@@ -309,11 +314,12 @@ export interface QuantWatchlistItemUpdate {
 export interface QuantStrategySettingsUpdate {
   enabled: boolean;
   desktop_notification_enabled: boolean;
+  strategy_mode?: QuantStrategyMode;
 }
 
 export interface QuantGridZone {
-  zone: QuantTriggerZone;
-  direction: QuantDirection;
+  zone: QuantGridTriggerZone;
+  direction: QuantGridDirection;
   lower: number;
   upper: number;
 }
@@ -326,7 +332,7 @@ export interface QuantSignal {
   direction: QuantDirection;
   trigger_price: number;
   trend_state: "bullish" | "bearish" | "neutral";
-  source: "auto_grid";
+  source: QuantStrategyMode;
   trigger_zone: QuantTriggerZone;
   triggered_at: string;
 }
@@ -334,6 +340,7 @@ export interface QuantSignal {
 export interface QuantGeneratedSignal {
   signal: QuantSignal;
   desktop_notification_enabled: boolean;
+  notification_body: string | null;
 }
 
 export interface QuantTarget {

@@ -3,7 +3,7 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import type { QuantGeneratedSignal } from "../types";
+import type { QuantDirection, QuantGeneratedSignal } from "../types";
 
 export async function notifyGeneratedQuantSignals(generatedSignals: QuantGeneratedSignal[]) {
   const eligibleSignals = generatedSignals.filter(
@@ -25,12 +25,28 @@ export async function notifyGeneratedQuantSignals(generatedSignals: QuantGenerat
     return { sent: 0, denied: true };
   }
 
-  for (const { signal } of eligibleSignals) {
-    const directionLabel =
-      signal.direction === "buy_attention" ? "触发买入关注" : "触发卖出关注";
+  const directionLabels: Record<QuantDirection, string> = {
+    buy_attention: "买入关注",
+    sell_attention: "卖出关注",
+    sell_t_attention: "卖T关注",
+    buyback_attention: "买回关注",
+  };
+
+  for (const item of eligibleSignals) {
+    const { signal } = item;
+    const directionLabel = directionLabels[signal.direction] ?? signal.direction;
+    const defaultBody =
+      signal.source === "intraday_t"
+        ? signal.direction === "sell_t_attention"
+          ? `历史高点高发时段 ${signal.trigger_zone}，当前日内位置已触发阈值，可关注卖T。仅供参考。`
+          : signal.direction === "buyback_attention"
+            ? `历史低点高发时段 ${signal.trigger_zone}，已满足止跌确认，可关注买回。仅供参考。`
+            : `历史高发时段 ${signal.trigger_zone}，当前日内位置已触发阈值，仅供参考。`
+        : "当前价格进入自动网格触发区，仅供参考。";
+
     sendNotification({
       title: `量化提醒：${signal.name || signal.code} ${directionLabel}`,
-      body: "当前价格进入自动网格触发区，仅供参考。",
+      body: item.notification_body ?? defaultBody,
     });
   }
 

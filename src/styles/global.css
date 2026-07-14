@@ -1016,9 +1016,8 @@ body,
 
 .quant-target-card__meta span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .quant-signal-buy {

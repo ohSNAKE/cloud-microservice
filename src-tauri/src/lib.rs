@@ -99,6 +99,8 @@ pub fn run() {
             commands::list_quant_signals,
             commands::get_quant_dashboard,
             commands::refresh_quant_signals,
+            commands::mark_intraday_t_sold,
+            commands::clear_intraday_t_sold,
             commands::update_quant_strategy_settings,
             commands::get_settings,
             commands::update_settings,

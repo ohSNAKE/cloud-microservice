@@ -132,7 +132,9 @@ fn export_payload_from_conn(conn: &Connection) -> Result<ExportPayload, String> 
     let mut quant_strategy_settings_stmt = conn
         .prepare(
             "SELECT id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds,
-                    desktop_notification_enabled, enabled, created_at, updated_at
+                    desktop_notification_enabled, enabled, strategy_mode, intraday_lookback_days,
+                    intraday_high_time_min_count, intraday_low_time_min_count,
+                    sell_t_position_threshold, buyback_position_threshold, created_at, updated_at
              FROM quant_strategy_settings ORDER BY id",
         )
         .map_err(|e| e.to_string())?;
@@ -150,8 +152,14 @@ fn export_payload_from_conn(conn: &Connection) -> Result<ExportPayload, String> 
                 poll_interval_seconds: row.get(6)?,
                 desktop_notification_enabled: desktop_notification_enabled != 0,
                 enabled: enabled != 0,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                strategy_mode: row.get(9)?,
+                intraday_lookback_days: row.get(10)?,
+                intraday_high_time_min_count: row.get(11)?,
+                intraday_low_time_min_count: row.get(12)?,
+                sell_t_position_threshold: row.get(13)?,
+                buyback_position_threshold: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -301,8 +309,10 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
         conn.execute(
             "INSERT INTO quant_strategy_settings
              (id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds,
-              desktop_notification_enabled, enabled, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+              desktop_notification_enabled, enabled, strategy_mode, intraday_lookback_days,
+              intraday_high_time_min_count, intraday_low_time_min_count,
+              sell_t_position_threshold, buyback_position_threshold, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 settings.id,
                 settings.code,
@@ -317,6 +327,12 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
                     0
                 },
                 if settings.enabled { 1 } else { 0 },
+                settings.strategy_mode,
+                settings.intraday_lookback_days,
+                settings.intraday_high_time_min_count,
+                settings.intraday_low_time_min_count,
+                settings.sell_t_position_threshold,
+                settings.buyback_position_threshold,
                 settings.created_at,
                 settings.updated_at
             ],
@@ -432,6 +448,12 @@ mod tests {
                 poll_interval_seconds INTEGER NOT NULL DEFAULT 60,
                 desktop_notification_enabled INTEGER NOT NULL DEFAULT 1,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                strategy_mode TEXT NOT NULL DEFAULT 'auto_grid',
+                intraday_lookback_days INTEGER NOT NULL DEFAULT 22,
+                intraday_high_time_min_count INTEGER NOT NULL DEFAULT 4,
+                intraday_low_time_min_count INTEGER NOT NULL DEFAULT 4,
+                sell_t_position_threshold REAL NOT NULL DEFAULT 0.70,
+                buyback_position_threshold REAL NOT NULL DEFAULT 0.30,
                 created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                 UNIQUE(code, market)
@@ -468,6 +490,35 @@ mod tests {
         }"#
     }
 
+    fn old_backup_json_with_legacy_quant_settings() -> &'static str {
+        r#"{
+            "version": "1.0",
+            "exported_at": "2026-01-01 00:00:00",
+            "accounts": [],
+            "categories": [],
+            "transactions": [],
+            "holdings": [],
+            "settings": [],
+            "quant_watchlist": [],
+            "quant_strategy_settings": [
+                {
+                    "id": 12,
+                    "code": "000001",
+                    "market": "cn",
+                    "ma_short": 5,
+                    "ma_long": 20,
+                    "grid_lookback_days": 30,
+                    "poll_interval_seconds": 60,
+                    "desktop_notification_enabled": true,
+                    "enabled": true,
+                    "created_at": "2026-01-01 09:00:00",
+                    "updated_at": "2026-01-01 09:00:00"
+                }
+            ],
+            "quant_signals": []
+        }"#
+    }
+
     fn table_count(conn: &Connection, table: &str) -> i64 {
         conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
@@ -482,6 +533,20 @@ mod tests {
         assert!(payload.quant_watchlist.is_empty());
         assert!(payload.quant_strategy_settings.is_empty());
         assert!(payload.quant_signals.is_empty());
+    }
+
+    #[test]
+    fn legacy_quant_settings_backup_uses_intraday_defaults() {
+        let payload: ExportPayload =
+            serde_json::from_str(old_backup_json_with_legacy_quant_settings()).unwrap();
+
+        let settings = &payload.quant_strategy_settings[0];
+        assert_eq!(settings.strategy_mode, "auto_grid");
+        assert_eq!(settings.intraday_lookback_days, 22);
+        assert_eq!(settings.intraday_high_time_min_count, 4);
+        assert_eq!(settings.intraday_low_time_min_count, 4);
+        assert_eq!(settings.sell_t_position_threshold, 0.70);
+        assert_eq!(settings.buyback_position_threshold, 0.30);
     }
 
     #[test]
@@ -531,8 +596,11 @@ mod tests {
         .unwrap();
         source.execute(
             "INSERT INTO quant_strategy_settings
-             (id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds, desktop_notification_enabled, enabled, created_at, updated_at)
-             VALUES (22, '513500', 'cn', 8, 34, 55, 120, 0, 1, '2026-02-01 09:02:00', '2026-02-01 09:03:00')",
+             (id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds,
+              desktop_notification_enabled, enabled, strategy_mode, intraday_lookback_days,
+              intraday_high_time_min_count, intraday_low_time_min_count,
+              sell_t_position_threshold, buyback_position_threshold, created_at, updated_at)
+             VALUES (22, '513500', 'cn', 8, 34, 55, 120, 0, 1, 'intraday_t', 33, 6, 5, 0.82, 0.18, '2026-02-01 09:02:00', '2026-02-01 09:03:00')",
             [],
         )
         .unwrap();
@@ -552,6 +620,30 @@ mod tests {
         assert_eq!(payload.quant_strategy_settings[0].id, 22);
         assert_eq!(payload.quant_strategy_settings[0].ma_short, 8);
         assert!(!payload.quant_strategy_settings[0].desktop_notification_enabled);
+        assert_eq!(
+            payload.quant_strategy_settings[0].strategy_mode,
+            "intraday_t"
+        );
+        assert_eq!(
+            payload.quant_strategy_settings[0].intraday_lookback_days,
+            33
+        );
+        assert_eq!(
+            payload.quant_strategy_settings[0].intraday_high_time_min_count,
+            6
+        );
+        assert_eq!(
+            payload.quant_strategy_settings[0].intraday_low_time_min_count,
+            5
+        );
+        assert_eq!(
+            payload.quant_strategy_settings[0].sell_t_position_threshold,
+            0.82
+        );
+        assert_eq!(
+            payload.quant_strategy_settings[0].buyback_position_threshold,
+            0.18
+        );
         assert_eq!(payload.quant_signals[0].id, 23);
         assert_eq!(
             payload.quant_signals[0].dedupe_key,
@@ -575,9 +667,26 @@ mod tests {
             (21, "513500".to_string(), "cn".to_string(), 0)
         );
 
-        let imported_settings: (i64, String, i64, i64, i64, i64) = target
+        let imported_settings: (
+            i64,
+            String,
+            i64,
+            i64,
+            i64,
+            i64,
+            String,
+            i64,
+            i64,
+            i64,
+            f64,
+            f64,
+        ) = target
             .query_row(
-                "SELECT id, code, ma_short, ma_long, desktop_notification_enabled, enabled FROM quant_strategy_settings",
+                "SELECT id, code, ma_short, ma_long, desktop_notification_enabled, enabled,
+                        strategy_mode, intraday_lookback_days, intraday_high_time_min_count,
+                        intraday_low_time_min_count, sell_t_position_threshold,
+                        buyback_position_threshold
+                 FROM quant_strategy_settings",
                 [],
                 |row| {
                     Ok((
@@ -587,11 +696,33 @@ mod tests {
                         row.get(3)?,
                         row.get(4)?,
                         row.get(5)?,
+                        row.get(6)?,
+                        row.get(7)?,
+                        row.get(8)?,
+                        row.get(9)?,
+                        row.get(10)?,
+                        row.get(11)?,
                     ))
                 },
             )
             .unwrap();
-        assert_eq!(imported_settings, (22, "513500".to_string(), 8, 34, 0, 1));
+        assert_eq!(
+            imported_settings,
+            (
+                22,
+                "513500".to_string(),
+                8,
+                34,
+                0,
+                1,
+                "intraday_t".to_string(),
+                33,
+                6,
+                5,
+                0.82,
+                0.18,
+            )
+        );
 
         let imported_signal: (i64, String, String, String, String) = target
             .query_row(

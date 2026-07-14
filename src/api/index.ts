@@ -109,6 +109,10 @@ export const api = {
   listQuantTargets: () => invoke<QuantTarget[]>("list_quant_targets"),
   getQuantDashboard: () => invoke<QuantDashboard>("get_quant_dashboard"),
   refreshQuantSignals: () => invoke<QuantRefreshResult>("refresh_quant_signals"),
+  markIntradayTSold: (code: string, market: string) =>
+    invoke<void>("mark_intraday_t_sold", { code, market }),
+  clearIntradayTSold: (code: string, market: string) =>
+    invoke<void>("clear_intraday_t_sold", { code, market }),
   listQuantSignals: (filter?: QuantSignalFilter) =>
     invoke<QuantSignal[]>("list_quant_signals", { filter }),
 

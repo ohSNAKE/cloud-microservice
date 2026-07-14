@@ -395,6 +395,26 @@ pub struct QuantWatchlistRow {
     pub updated_at: String,
 }
 
+pub fn default_quant_strategy_mode() -> String {
+    "auto_grid".to_string()
+}
+
+pub fn default_intraday_lookback_days() -> i64 {
+    22
+}
+
+pub fn default_intraday_time_min_count() -> i64 {
+    4
+}
+
+pub fn default_sell_t_position_threshold() -> f64 {
+    0.70
+}
+
+pub fn default_buyback_position_threshold() -> f64 {
+    0.30
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QuantStrategySettingsRow {
     pub id: i64,
@@ -406,6 +426,18 @@ pub struct QuantStrategySettingsRow {
     pub poll_interval_seconds: i64,
     pub desktop_notification_enabled: bool,
     pub enabled: bool,
+    #[serde(default = "default_quant_strategy_mode")]
+    pub strategy_mode: String,
+    #[serde(default = "default_intraday_lookback_days")]
+    pub intraday_lookback_days: i64,
+    #[serde(default = "default_intraday_time_min_count")]
+    pub intraday_high_time_min_count: i64,
+    #[serde(default = "default_intraday_time_min_count")]
+    pub intraday_low_time_min_count: i64,
+    #[serde(default = "default_sell_t_position_threshold")]
+    pub sell_t_position_threshold: f64,
+    #[serde(default = "default_buyback_position_threshold")]
+    pub buyback_position_threshold: f64,
     pub created_at: String,
     pub updated_at: String,
 }
