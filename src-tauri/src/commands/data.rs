@@ -1,7 +1,7 @@
 use crate::db::{db_path_hint, now_local};
 use crate::models::{
-    Account, Category, ExportPayload, HoldingRow, QuantSignalRow, QuantStrategySettingsRow,
-    QuantWatchlistRow, TransactionRow,
+    Account, Category, ExportPayload, HoldingRow, QuantIntradayTStateRow, QuantSignalRow,
+    QuantStrategySettingsRow, QuantWatchlistRow, TransactionRow,
 };
 use crate::AppState;
 use rusqlite::{params, Connection};
@@ -194,6 +194,25 @@ fn export_payload_from_conn(conn: &Connection) -> Result<ExportPayload, String> 
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
+    let mut quant_intraday_t_state_stmt = conn
+        .prepare(
+            "SELECT code, market, trading_date, sold_at
+             FROM quant_intraday_t_state ORDER BY code, market, trading_date",
+        )
+        .map_err(|e| e.to_string())?;
+    let quant_intraday_t_state: Vec<QuantIntradayTStateRow> = quant_intraday_t_state_stmt
+        .query_map([], |row| {
+            Ok(QuantIntradayTStateRow {
+                code: row.get(0)?,
+                market: row.get(1)?,
+                trading_date: row.get(2)?,
+                sold_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
     Ok(ExportPayload {
         version: "1.0".to_string(),
         exported_at: now_local(),
@@ -205,6 +224,7 @@ fn export_payload_from_conn(conn: &Connection) -> Result<ExportPayload, String> 
         quant_watchlist,
         quant_strategy_settings,
         quant_signals,
+        quant_intraday_t_state,
     })
 }
 
@@ -217,8 +237,17 @@ pub fn import_data(state: State<AppState>, json: String) -> Result<(), String> {
 }
 
 fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(), String> {
-    conn.execute_batch(
-        "DELETE FROM quant_signals;
+    for settings in &payload.quant_strategy_settings {
+        match settings.strategy_mode.as_str() {
+            "auto_grid" | "intraday_t" => {}
+            _ => return Err("invalid strategy_mode; expected auto_grid or intraday_t".to_string()),
+        }
+    }
+
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute_batch(
+        "DELETE FROM quant_intraday_t_state;
+         DELETE FROM quant_signals;
          DELETE FROM quant_strategy_settings;
          DELETE FROM quant_watchlist;
          DELETE FROM price_history;
@@ -231,7 +260,7 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     .map_err(|e| e.to_string())?;
 
     for account in payload.accounts {
-        conn.execute(
+        tx.execute(
             "INSERT INTO accounts (id, name, type, balance, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![account.id, account.name, account.r#type, account.balance, account.created_at],
         )
@@ -239,32 +268,32 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     }
 
     for category in payload.categories {
-        conn.execute(
+        tx.execute(
             "INSERT INTO categories (id, name, type, icon) VALUES (?1, ?2, ?3, ?4)",
             params![category.id, category.name, category.r#type, category.icon],
         )
         .map_err(|e| e.to_string())?;
     }
 
-    for tx in payload.transactions {
-        conn.execute(
+    for transaction in payload.transactions {
+        tx.execute(
             "INSERT INTO transactions (type, amount, category_id, account_id, transfer_to_account_id, note, transaction_date)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                tx.r#type,
-                tx.amount,
-                tx.category_id,
-                tx.account_id,
-                tx.transfer_to_account_id,
-                tx.note,
-                tx.transaction_date
+                transaction.r#type,
+                transaction.amount,
+                transaction.category_id,
+                transaction.account_id,
+                transaction.transfer_to_account_id,
+                transaction.note,
+                transaction.transaction_date
             ],
         )
         .map_err(|e| e.to_string())?;
     }
 
     for holding in payload.holdings {
-        conn.execute(
+        tx.execute(
             "INSERT INTO holdings (code, name, type, quantity, cost_price, current_price, market)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -281,7 +310,7 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     }
 
     for (key, value) in payload.settings {
-        conn.execute(
+        tx.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)",
             params![key, value],
         )
@@ -289,7 +318,7 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     }
 
     for item in payload.quant_watchlist {
-        conn.execute(
+        tx.execute(
             "INSERT INTO quant_watchlist (id, code, name, market, enabled, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -306,7 +335,7 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     }
 
     for settings in payload.quant_strategy_settings {
-        conn.execute(
+        tx.execute(
             "INSERT INTO quant_strategy_settings
              (id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds,
               desktop_notification_enabled, enabled, strategy_mode, intraday_lookback_days,
@@ -341,7 +370,7 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     }
 
     for signal in payload.quant_signals {
-        conn.execute(
+        tx.execute(
             "INSERT INTO quant_signals
              (id, code, name, market, direction, trigger_price, trend_state, source,
               trigger_zone, dedupe_key, triggered_at, created_at)
@@ -364,7 +393,16 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
         .map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    for state in payload.quant_intraday_t_state {
+        tx.execute(
+            "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![state.code, state.market, state.trading_date, state.sold_at],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -473,6 +511,14 @@ mod tests {
                 triggered_at TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
+
+            CREATE TABLE quant_intraday_t_state (
+                code TEXT NOT NULL,
+                market TEXT NOT NULL,
+                trading_date TEXT NOT NULL,
+                sold_at TEXT NOT NULL,
+                PRIMARY KEY (code, market, trading_date)
+            );
             ",
         )
         .unwrap();
@@ -533,6 +579,7 @@ mod tests {
         assert!(payload.quant_watchlist.is_empty());
         assert!(payload.quant_strategy_settings.is_empty());
         assert!(payload.quant_signals.is_empty());
+        assert!(payload.quant_intraday_t_state.is_empty());
     }
 
     #[test]
@@ -562,8 +609,11 @@ mod tests {
         .unwrap();
         conn.execute(
             "INSERT INTO quant_strategy_settings
-             (id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds, desktop_notification_enabled, enabled, created_at, updated_at)
-             VALUES (12, '000001', 'cn', 5, 20, 30, 60, 1, 1, '2026-01-01 09:00:00', '2026-01-01 09:00:00')",
+             (id, code, market, ma_short, ma_long, grid_lookback_days, poll_interval_seconds,
+              desktop_notification_enabled, enabled, strategy_mode, intraday_lookback_days,
+              intraday_high_time_min_count, intraday_low_time_min_count,
+              sell_t_position_threshold, buyback_position_threshold, created_at, updated_at)
+             VALUES (12, '000001', 'cn', 5, 20, 30, 60, 1, 1, 'auto_grid', 22, 4, 4, 0.70, 0.30, '2026-01-01 09:00:00', '2026-01-01 09:00:00')",
             [],
         )
         .unwrap();
@@ -574,6 +624,12 @@ mod tests {
             [],
         )
         .unwrap();
+        conn.execute(
+            "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+             VALUES ('000001', 'cn', '2026-01-01', '2026-01-01 09:30:00')",
+            [],
+        )
+        .unwrap();
 
         let payload: ExportPayload = serde_json::from_str(old_backup_json()).unwrap();
         import_payload_to_conn(&conn, payload).unwrap();
@@ -581,6 +637,7 @@ mod tests {
         assert_eq!(table_count(&conn, "quant_watchlist"), 0);
         assert_eq!(table_count(&conn, "quant_strategy_settings"), 0);
         assert_eq!(table_count(&conn, "quant_signals"), 0);
+        assert_eq!(table_count(&conn, "quant_intraday_t_state"), 0);
     }
 
     #[test]
@@ -749,5 +806,140 @@ mod tests {
                 "2026-02-01 10:00:00".to_string(),
             )
         );
+    }
+
+    #[test]
+    fn export_import_round_trips_intraday_t_sale_acknowledgement() {
+        let source = Connection::open_in_memory().unwrap();
+        setup_schema(&source);
+        source
+            .execute(
+                "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+                 VALUES ('000001', 'cn', '2026-07-07', '2026-07-07 10:01:02')",
+                [],
+            )
+            .unwrap();
+
+        let payload = export_payload_from_conn(&source).unwrap();
+        assert_eq!(payload.quant_intraday_t_state.len(), 1);
+
+        let target = Connection::open_in_memory().unwrap();
+        setup_schema(&target);
+        import_payload_to_conn(&target, payload).unwrap();
+        let imported: (String, String, String, String) = target
+            .query_row(
+                "SELECT code, market, trading_date, sold_at FROM quant_intraday_t_state",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            imported,
+            (
+                "000001".to_string(),
+                "cn".to_string(),
+                "2026-07-07".to_string(),
+                "2026-07-07 10:01:02".to_string(),
+            )
+        );
+    }
+
+    #[test]
+    fn failed_late_intraday_t_state_import_leaves_existing_data_unchanged() {
+        let source = Connection::open_in_memory().unwrap();
+        setup_schema(&source);
+        source
+            .execute(
+                "INSERT INTO accounts (id, name, type, balance, created_at)
+                 VALUES (1, 'Imported cash', 'cash', 10.0, '2026-07-07 09:00:00')",
+                [],
+            )
+            .unwrap();
+        source
+            .execute(
+                "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+                 VALUES ('000001', 'cn', '2026-07-07', '2026-07-07 10:01:02')",
+                [],
+            )
+            .unwrap();
+        let mut payload = export_payload_from_conn(&source).unwrap();
+        payload
+            .quant_intraday_t_state
+            .push(payload.quant_intraday_t_state[0].clone());
+
+        let target = Connection::open_in_memory().unwrap();
+        setup_schema(&target);
+        target
+            .execute(
+                "INSERT INTO accounts (id, name, type, balance, created_at)
+                 VALUES (9, 'Existing cash', 'cash', 99.0, '2026-07-07 08:00:00')",
+                [],
+            )
+            .unwrap();
+        target
+            .execute(
+                "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+                 VALUES ('000009', 'cn', '2026-07-07', '2026-07-07 08:30:00')",
+                [],
+            )
+            .unwrap();
+
+        assert!(import_payload_to_conn(&target, payload).is_err());
+
+        let account: (i64, String, f64) = target
+            .query_row("SELECT id, name, balance FROM accounts", [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(account, (9, "Existing cash".to_string(), 99.0));
+        let state: (String, String) = target
+            .query_row(
+                "SELECT code, sold_at FROM quant_intraday_t_state",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            state,
+            ("000009".to_string(), "2026-07-07 08:30:00".to_string())
+        );
+    }
+
+    #[test]
+    fn invalid_strategy_mode_import_returns_error_without_replacing_existing_data() {
+        let source = Connection::open_in_memory().unwrap();
+        setup_schema(&source);
+        source
+            .execute(
+                "INSERT INTO quant_strategy_settings
+                 (id, code, market, strategy_mode, created_at, updated_at)
+                 VALUES (1, '000001', 'cn', 'unsupported_mode', '2026-07-07 09:00:00', '2026-07-07 09:00:00')",
+                [],
+            )
+            .unwrap();
+        let payload = export_payload_from_conn(&source).unwrap();
+
+        let target = Connection::open_in_memory().unwrap();
+        setup_schema(&target);
+        target
+            .execute(
+                "INSERT INTO accounts (id, name, type, balance, created_at)
+                 VALUES (9, 'Existing cash', 'cash', 99.0, '2026-07-07 08:00:00')",
+                [],
+            )
+            .unwrap();
+
+        let error = import_payload_to_conn(&target, payload).unwrap_err();
+
+        assert_eq!(
+            error,
+            "invalid strategy_mode; expected auto_grid or intraday_t"
+        );
+        let account: (i64, String, f64) = target
+            .query_row("SELECT id, name, balance FROM accounts", [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(account, (9, "Existing cash".to_string(), 99.0));
     }
 }

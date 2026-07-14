@@ -459,6 +459,14 @@ pub struct QuantSignalRow {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct QuantIntradayTStateRow {
+    pub code: String,
+    pub market: String,
+    pub trading_date: String,
+    pub sold_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportPayload {
     pub version: String,
     pub exported_at: String,
@@ -473,6 +481,8 @@ pub struct ExportPayload {
     pub quant_strategy_settings: Vec<QuantStrategySettingsRow>,
     #[serde(default)]
     pub quant_signals: Vec<QuantSignalRow>,
+    #[serde(default)]
+    pub quant_intraday_t_state: Vec<QuantIntradayTStateRow>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
