@@ -167,6 +167,7 @@ pub async fn lookup_stock_name(code: &str) -> Result<String, String> {
 
 fn kline_period_code(period: &str) -> i32 {
     match period {
+        "5m" | "5min" => 5,
         "week" => 102,
         "month" => 103,
         _ => 101,

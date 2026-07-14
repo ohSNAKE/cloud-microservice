@@ -303,6 +303,7 @@ pub struct QuantWatchlistItemUpdate {
 pub struct QuantStrategySettingsUpdate {
     pub enabled: bool,
     pub desktop_notification_enabled: bool,
+    pub strategy_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -331,6 +332,7 @@ pub struct QuantSignal {
 pub struct QuantGeneratedSignal {
     pub signal: QuantSignal,
     pub desktop_notification_enabled: bool,
+    pub notification_body: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -339,6 +341,7 @@ pub struct QuantTarget {
     pub name: String,
     pub market: String,
     pub source: String,
+    pub strategy_mode: String,
     pub enabled: bool,
     pub desktop_notification_enabled: bool,
     pub current_price: Option<f64>,
@@ -350,6 +353,11 @@ pub struct QuantTarget {
     pub ma_long: Option<f64>,
     pub grid_zones: Vec<QuantGridZone>,
     pub latest_signal: Option<QuantSignal>,
+    pub intraday_position: Option<f64>,
+    pub intraday_reason: Option<String>,
+    pub intraday_high_frequency_windows: Vec<String>,
+    pub intraday_low_frequency_windows: Vec<String>,
+    pub has_sold_t_today: bool,
     pub last_error: Option<String>,
 }
 

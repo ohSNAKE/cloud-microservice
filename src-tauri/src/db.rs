@@ -118,6 +118,12 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
             poll_interval_seconds INTEGER NOT NULL DEFAULT 60,
             desktop_notification_enabled INTEGER NOT NULL DEFAULT 1,
             enabled INTEGER NOT NULL DEFAULT 1,
+            strategy_mode TEXT NOT NULL DEFAULT 'auto_grid',
+            intraday_lookback_days INTEGER NOT NULL DEFAULT 22,
+            intraday_high_time_min_count INTEGER NOT NULL DEFAULT 4,
+            intraday_low_time_min_count INTEGER NOT NULL DEFAULT 4,
+            sell_t_position_threshold REAL NOT NULL DEFAULT 0.70,
+            buyback_position_threshold REAL NOT NULL DEFAULT 0.30,
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             UNIQUE(code, market)
@@ -138,6 +144,14 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
 
+        CREATE TABLE IF NOT EXISTS quant_intraday_t_state (
+            code TEXT NOT NULL,
+            market TEXT NOT NULL,
+            trading_date TEXT NOT NULL,
+            sold_at TEXT NOT NULL,
+            PRIMARY KEY (code, market, trading_date)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
         CREATE INDEX IF NOT EXISTS idx_price_history_holding ON price_history(holding_id, recorded_at);
         CREATE INDEX IF NOT EXISTS idx_quant_signals_code_time ON quant_signals(code, triggered_at);
@@ -148,6 +162,25 @@ pub fn init_db(app_handle: &tauri::AppHandle) -> Result<Connection, rusqlite::Er
     migrate(&conn)?;
     seed_defaults(&conn)?;
     Ok(conn)
+}
+
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), rusqlite::Error> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let has_column = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(Result::ok)
+        .any(|name| name == column);
+
+    if !has_column {
+        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {definition}"), [])?;
+    }
+
+    Ok(())
 }
 
 fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -211,6 +244,12 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
             poll_interval_seconds INTEGER NOT NULL DEFAULT 60,
             desktop_notification_enabled INTEGER NOT NULL DEFAULT 1,
             enabled INTEGER NOT NULL DEFAULT 1,
+            strategy_mode TEXT NOT NULL DEFAULT 'auto_grid',
+            intraday_lookback_days INTEGER NOT NULL DEFAULT 22,
+            intraday_high_time_min_count INTEGER NOT NULL DEFAULT 4,
+            intraday_low_time_min_count INTEGER NOT NULL DEFAULT 4,
+            sell_t_position_threshold REAL NOT NULL DEFAULT 0.70,
+            buyback_position_threshold REAL NOT NULL DEFAULT 0.30,
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             UNIQUE(code, market)
@@ -229,10 +268,46 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
             triggered_at TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
+        CREATE TABLE IF NOT EXISTS quant_intraday_t_state (
+            code TEXT NOT NULL,
+            market TEXT NOT NULL,
+            trading_date TEXT NOT NULL,
+            sold_at TEXT NOT NULL,
+            PRIMARY KEY (code, market, trading_date)
+        );
         CREATE INDEX IF NOT EXISTS idx_quant_signals_code_time ON quant_signals(code, triggered_at);
         CREATE INDEX IF NOT EXISTS idx_quant_signals_dedupe_time ON quant_signals(dedupe_key, triggered_at);
         ",
     )?;
+
+    for (column, definition) in [
+        (
+            "strategy_mode",
+            "strategy_mode TEXT NOT NULL DEFAULT 'auto_grid'",
+        ),
+        (
+            "intraday_lookback_days",
+            "intraday_lookback_days INTEGER NOT NULL DEFAULT 22",
+        ),
+        (
+            "intraday_high_time_min_count",
+            "intraday_high_time_min_count INTEGER NOT NULL DEFAULT 4",
+        ),
+        (
+            "intraday_low_time_min_count",
+            "intraday_low_time_min_count INTEGER NOT NULL DEFAULT 4",
+        ),
+        (
+            "sell_t_position_threshold",
+            "sell_t_position_threshold REAL NOT NULL DEFAULT 0.70",
+        ),
+        (
+            "buyback_position_threshold",
+            "buyback_position_threshold REAL NOT NULL DEFAULT 0.30",
+        ),
+    ] {
+        ensure_column(conn, "quant_strategy_settings", column, definition)?;
+    }
 
     conn.execute(
         "UPDATE settings SET value = 'https://v2.pincc.ai/v1'

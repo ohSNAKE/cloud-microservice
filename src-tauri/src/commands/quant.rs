@@ -5,8 +5,10 @@ use crate::models::{
     QuantWatchlistItem, QuantWatchlistItemUpdate,
 };
 use crate::services::quant::{
-    china_market_now, classify_trend, completed_daily_bars, decide_signal, dedupe_key,
-    generate_grid_zones, is_trading_time, next_refresh_at, quote_is_strictly_realtime,
+    analyze_intraday_t_windows, china_market_now, classify_trend, completed_daily_bars,
+    completed_intraday_bars, decide_guarded_intraday_t_signal, decide_signal, dedupe_key,
+    generate_grid_zones, intraday_t_day_position, is_trading_time, next_refresh_at,
+    quote_is_intraday_t_realtime, quote_is_strictly_realtime, IntradayTSignalInput,
 };
 use crate::services::quote::{
     fetch_stock_kline, fetch_stock_realtime_quote, lookup_stock_name, RealtimeStockQuote,
@@ -14,6 +16,7 @@ use crate::services::quote::{
 use crate::AppState;
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
+use std::future::Future;
 use tauri::State;
 
 #[derive(Clone)]
@@ -21,13 +24,28 @@ pub struct QuantMarketSnapshot {
     code: String,
     market: String,
     daily_bars: Result<Vec<KlineBar>, String>,
+    minute_bars: Result<Vec<KlineBar>, String>,
     realtime_quote: Result<RealtimeStockQuote, String>,
+}
+
+#[derive(Clone)]
+struct QuantSnapshotRequest {
+    code: String,
+    market: String,
+    daily_limit: i64,
+    minute_limit: Option<i64>,
 }
 
 const DEFAULT_MA_SHORT: usize = 5;
 const DEFAULT_MA_LONG: usize = 20;
 const DEFAULT_GRID_LOOKBACK_DAYS: usize = 20;
 const DEFAULT_POLL_INTERVAL_SECONDS: i64 = 60;
+const DEFAULT_STRATEGY_MODE: &str = "auto_grid";
+const DEFAULT_INTRADAY_LOOKBACK_DAYS: usize = 22;
+const DEFAULT_INTRADAY_TIME_MIN_COUNT: usize = 4;
+const DEFAULT_SELL_T_POSITION_THRESHOLD: f64 = 0.70;
+const DEFAULT_BUYBACK_POSITION_THRESHOLD: f64 = 0.30;
+const INTRADAY_T_MIN_RANGE: f64 = 0.0001;
 const SUPPORTED_QUANT_MARKET: &str = "cn";
 
 fn ensure_supported_quant_market(market: &str) -> Result<(), String> {
@@ -40,12 +58,50 @@ fn ensure_supported_quant_market(market: &str) -> Result<(), String> {
     }
 }
 
+fn validate_quant_strategy_mode(strategy_mode: &str) -> Result<String, String> {
+    let strategy_mode = strategy_mode.trim();
+    match strategy_mode {
+        "auto_grid" | "intraday_t" => Ok(strategy_mode.to_string()),
+        _ => Err("invalid strategy_mode; expected auto_grid or intraday_t".to_string()),
+    }
+}
+
+fn clamp_intraday_lookback_days(value: i64) -> usize {
+    if value <= 0 {
+        DEFAULT_INTRADAY_LOOKBACK_DAYS
+    } else {
+        (value as usize).clamp(10, 60)
+    }
+}
+
+fn clamp_intraday_time_min_count(value: i64, lookback_days: usize) -> usize {
+    if value <= 0 {
+        DEFAULT_INTRADAY_TIME_MIN_COUNT.min(lookback_days)
+    } else {
+        (value as usize).clamp(1, lookback_days)
+    }
+}
+
+fn clamp_intraday_position_threshold(value: f64, default: f64) -> f64 {
+    if value.is_finite() && (0.0..=1.0).contains(&value) {
+        value
+    } else {
+        default
+    }
+}
+
 #[derive(Clone)]
 struct QuantStrategySettingsRow {
     ma_short: usize,
     ma_long: usize,
     grid_lookback_days: usize,
     poll_interval_seconds: i64,
+    strategy_mode: String,
+    intraday_lookback_days: usize,
+    intraday_high_time_min_count: usize,
+    intraday_low_time_min_count: usize,
+    sell_t_position_threshold: f64,
+    buyback_position_threshold: f64,
 }
 
 fn load_quant_strategy_settings_row(
@@ -54,15 +110,36 @@ fn load_quant_strategy_settings_row(
     market: &str,
 ) -> Result<QuantStrategySettingsRow, String> {
     let existing = conn.query_row(
-        "SELECT ma_short, ma_long, grid_lookback_days, poll_interval_seconds
+        "SELECT ma_short, ma_long, grid_lookback_days, poll_interval_seconds, strategy_mode,
+                intraday_lookback_days, intraday_high_time_min_count, intraday_low_time_min_count,
+                sell_t_position_threshold, buyback_position_threshold
          FROM quant_strategy_settings WHERE code = ?1 AND market = ?2",
         params![code, market],
         |row| {
+            let intraday_lookback_days = clamp_intraday_lookback_days(row.get(5)?);
             Ok(QuantStrategySettingsRow {
                 ma_short: row.get::<_, i64>(0)?.max(1) as usize,
                 ma_long: row.get::<_, i64>(1)?.max(1) as usize,
                 grid_lookback_days: row.get::<_, i64>(2)?.max(1) as usize,
                 poll_interval_seconds: row.get::<_, i64>(3)?.max(1),
+                strategy_mode: row.get(4)?,
+                intraday_lookback_days,
+                intraday_high_time_min_count: clamp_intraday_time_min_count(
+                    row.get(6)?,
+                    intraday_lookback_days,
+                ),
+                intraday_low_time_min_count: clamp_intraday_time_min_count(
+                    row.get(7)?,
+                    intraday_lookback_days,
+                ),
+                sell_t_position_threshold: clamp_intraday_position_threshold(
+                    row.get(8)?,
+                    DEFAULT_SELL_T_POSITION_THRESHOLD,
+                ),
+                buyback_position_threshold: clamp_intraday_position_threshold(
+                    row.get(9)?,
+                    DEFAULT_BUYBACK_POSITION_THRESHOLD,
+                ),
             })
         },
     );
@@ -74,6 +151,12 @@ fn load_quant_strategy_settings_row(
             ma_long: DEFAULT_MA_LONG,
             grid_lookback_days: DEFAULT_GRID_LOOKBACK_DAYS,
             poll_interval_seconds: DEFAULT_POLL_INTERVAL_SECONDS,
+            strategy_mode: DEFAULT_STRATEGY_MODE.to_string(),
+            intraday_lookback_days: DEFAULT_INTRADAY_LOOKBACK_DAYS,
+            intraday_high_time_min_count: DEFAULT_INTRADAY_TIME_MIN_COUNT,
+            intraday_low_time_min_count: DEFAULT_INTRADAY_TIME_MIN_COUNT,
+            sell_t_position_threshold: DEFAULT_SELL_T_POSITION_THRESHOLD,
+            buyback_position_threshold: DEFAULT_BUYBACK_POSITION_THRESHOLD,
         }),
         Err(err) => Err(err.to_string()),
     }
@@ -104,7 +187,7 @@ fn quant_target_from_candidate(
     candidate: QuantTargetCandidate,
 ) -> Result<QuantTarget, String> {
     let source = source_for_candidate(&candidate).to_string();
-    let (enabled, desktop_notification_enabled) = ensure_quant_settings(
+    let (enabled, desktop_notification_enabled, strategy_mode) = ensure_quant_settings(
         conn,
         &candidate.code,
         &candidate.market,
@@ -115,6 +198,7 @@ fn quant_target_from_candidate(
     Ok(quant_target_from_candidate_settings(
         candidate,
         source,
+        strategy_mode,
         enabled,
         desktop_notification_enabled,
     ))
@@ -126,12 +210,18 @@ fn quant_target_from_candidate_read_only(
 ) -> Result<QuantTarget, String> {
     let source = source_for_candidate(&candidate).to_string();
     let existing = conn.query_row(
-        "SELECT enabled, desktop_notification_enabled
+        "SELECT enabled, desktop_notification_enabled, strategy_mode
          FROM quant_strategy_settings WHERE code = ?1 AND market = ?2",
         params![&candidate.code, &candidate.market],
-        |row| Ok((row.get::<_, i64>(0)? != 0, row.get::<_, i64>(1)? != 0)),
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)? != 0,
+                row.get::<_, i64>(1)? != 0,
+                row.get::<_, String>(2)?,
+            ))
+        },
     );
-    let (enabled, desktop_notification_enabled) = match existing {
+    let (enabled, desktop_notification_enabled, strategy_mode) = match existing {
         Ok(settings) => settings,
         Err(rusqlite::Error::QueryReturnedNoRows) => {
             let enabled = if source == "watchlist" {
@@ -139,7 +229,7 @@ fn quant_target_from_candidate_read_only(
             } else {
                 true
             };
-            (enabled, true)
+            (enabled, true, DEFAULT_STRATEGY_MODE.to_string())
         }
         Err(err) => return Err(err.to_string()),
     };
@@ -147,6 +237,7 @@ fn quant_target_from_candidate_read_only(
     Ok(quant_target_from_candidate_settings(
         candidate,
         source,
+        strategy_mode,
         enabled,
         desktop_notification_enabled,
     ))
@@ -155,6 +246,7 @@ fn quant_target_from_candidate_read_only(
 fn quant_target_from_candidate_settings(
     candidate: QuantTargetCandidate,
     source: String,
+    strategy_mode: String,
     enabled: bool,
     desktop_notification_enabled: bool,
 ) -> QuantTarget {
@@ -173,6 +265,7 @@ fn quant_target_from_candidate_settings(
         name,
         market: candidate.market,
         source,
+        strategy_mode,
         enabled,
         desktop_notification_enabled,
         current_price: None,
@@ -184,6 +277,11 @@ fn quant_target_from_candidate_settings(
         ma_long: None,
         grid_zones: vec![],
         latest_signal: None,
+        intraday_position: None,
+        intraday_reason: None,
+        intraday_high_frequency_windows: vec![],
+        intraday_low_frequency_windows: vec![],
+        has_sold_t_today: false,
         last_error: None,
     }
 }
@@ -194,12 +292,18 @@ pub fn ensure_quant_settings(
     market: &str,
     source: &str,
     watchlist_enabled: Option<bool>,
-) -> Result<(bool, bool), String> {
+) -> Result<(bool, bool, String), String> {
     let existing = conn.query_row(
-        "SELECT enabled, desktop_notification_enabled
+        "SELECT enabled, desktop_notification_enabled, strategy_mode
          FROM quant_strategy_settings WHERE code = ?1 AND market = ?2",
         params![code, market],
-        |row| Ok((row.get::<_, i64>(0)? != 0, row.get::<_, i64>(1)? != 0)),
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)? != 0,
+                row.get::<_, i64>(1)? != 0,
+                row.get::<_, String>(2)?,
+            ))
+        },
     );
 
     match existing {
@@ -216,7 +320,7 @@ pub fn ensure_quant_settings(
                 params![code, market, if enabled { 1 } else { 0 }],
             )
             .map_err(|e| e.to_string())?;
-            Ok((enabled, true))
+            Ok((enabled, true, DEFAULT_STRATEGY_MODE.to_string()))
         }
         Err(err) => Err(err.to_string()),
     }
@@ -301,6 +405,11 @@ pub fn merge_quant_targets(conn: &Connection) -> Result<Vec<QuantTarget>, String
         .into_iter()
         .map(|candidate| quant_target_from_candidate(conn, candidate))
         .collect::<Result<Vec<_>, _>>()?;
+    set_intraday_t_state_for_date(
+        conn,
+        &mut targets,
+        &china_market_now().format("%Y-%m-%d").to_string(),
+    )?;
     targets.sort_by(|a, b| a.market.cmp(&b.market).then(a.code.cmp(&b.code)));
     Ok(targets)
 }
@@ -369,6 +478,98 @@ fn load_quant_target_candidate(
     }
 }
 
+fn intraday_t_sold_at_for_date(
+    conn: &Connection,
+    code: &str,
+    market: &str,
+    trading_date: &str,
+) -> Result<Option<String>, String> {
+    match conn.query_row(
+        "SELECT sold_at FROM quant_intraday_t_state
+         WHERE code = ?1 AND market = ?2 AND trading_date = ?3",
+        params![code, market, trading_date],
+        |row| row.get(0),
+    ) {
+        Ok(sold_at) => Ok(Some(sold_at)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+fn set_intraday_t_state_for_date(
+    conn: &Connection,
+    targets: &mut [QuantTarget],
+    trading_date: &str,
+) -> Result<(), String> {
+    for target in targets {
+        target.has_sold_t_today =
+            intraday_t_sold_at_for_date(conn, &target.code, &target.market, trading_date)?
+                .is_some();
+    }
+    Ok(())
+}
+
+fn validate_intraday_t_target(conn: &Connection, code: &str, market: &str) -> Result<(), String> {
+    ensure_supported_quant_market(market)?;
+    load_quant_target_candidate(conn, code, market)?.ok_or_else(|| "量化目标不存在".to_string())?;
+    if load_quant_strategy_settings_row(conn, code, market)?.strategy_mode != "intraday_t" {
+        return Err("当前量化目标未启用日内T策略".to_string());
+    }
+    Ok(())
+}
+
+fn mark_intraday_t_sold_in_conn(
+    conn: &Connection,
+    code: &str,
+    market: &str,
+    quote: &RealtimeStockQuote,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> Result<(), String> {
+    let code = code.trim();
+    let market = market.trim();
+    validate_intraday_t_target(conn, code, market)?;
+    if !quote_is_intraday_t_realtime(quote, now) {
+        return Err("行情不是当前交易时段实时数据".to_string());
+    }
+
+    conn.execute(
+        "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(code, market, trading_date) DO UPDATE SET sold_at = excluded.sold_at",
+        params![
+            code,
+            market,
+            now.format("%Y-%m-%d").to_string(),
+            now.format("%Y-%m-%d %H:%M:%S").to_string(),
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn clear_intraday_t_sold_in_conn(
+    conn: &Connection,
+    code: &str,
+    market: &str,
+    quote: &RealtimeStockQuote,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> Result<(), String> {
+    let code = code.trim();
+    let market = market.trim();
+    validate_intraday_t_target(conn, code, market)?;
+    if !quote_is_intraday_t_realtime(quote, now) {
+        return Err("行情不是当前交易时段实时数据".to_string());
+    }
+
+    conn.execute(
+        "DELETE FROM quant_intraday_t_state
+         WHERE code = ?1 AND market = ?2 AND trading_date = ?3",
+        params![code, market, now.format("%Y-%m-%d").to_string()],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
 fn update_quant_strategy_settings_in_conn(
     conn: &Connection,
     code: String,
@@ -378,16 +579,22 @@ fn update_quant_strategy_settings_in_conn(
     let code = code.trim().to_string();
     let market = market.trim().to_string();
     ensure_supported_quant_market(&market)?;
+    let strategy_mode = input
+        .strategy_mode
+        .as_deref()
+        .map(validate_quant_strategy_mode)
+        .transpose()?;
     let candidate = load_quant_target_candidate(conn, &code, &market)?
         .ok_or_else(|| "量化目标不存在".to_string())?;
 
     conn.execute(
         "INSERT INTO quant_strategy_settings
-            (code, market, enabled, desktop_notification_enabled, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+            (code, market, enabled, desktop_notification_enabled, strategy_mode, updated_at)
+         VALUES (?1, ?2, ?3, ?4, COALESCE(?5, 'auto_grid'), ?6)
          ON CONFLICT(code, market) DO UPDATE SET
             enabled = excluded.enabled,
             desktop_notification_enabled = excluded.desktop_notification_enabled,
+            strategy_mode = COALESCE(?5, quant_strategy_settings.strategy_mode),
             updated_at = excluded.updated_at",
         params![
             &code,
@@ -398,6 +605,7 @@ fn update_quant_strategy_settings_in_conn(
             } else {
                 0
             },
+            strategy_mode,
             now_local()
         ],
     )
@@ -509,6 +717,7 @@ pub fn build_quant_dashboard_with_snapshots(
     now: chrono::DateTime<chrono::FixedOffset>,
 ) -> Result<QuantDashboard, String> {
     let mut targets = merge_quant_targets_read_only(conn)?;
+    let current_date = now.format("%Y-%m-%d").to_string();
     let recent_signals = list_quant_signals_from_conn(
         conn,
         Some(QuantSignalFilter {
@@ -524,6 +733,9 @@ pub fn build_quant_dashboard_with_snapshots(
 
     for target in &mut targets {
         target.latest_signal = latest_quant_signal_from_conn(conn, &target.code, &target.market)?;
+        let sold_at =
+            intraday_t_sold_at_for_date(conn, &target.code, &target.market, &current_date)?;
+        target.has_sold_t_today = sold_at.is_some();
 
         if !target.enabled {
             target.output_state = "watch".to_string();
@@ -536,6 +748,7 @@ pub fn build_quant_dashboard_with_snapshots(
         };
 
         let settings = load_quant_strategy_settings_row(conn, &target.code, &target.market)?;
+        target.strategy_mode = settings.strategy_mode.clone();
         dashboard_poll_interval_seconds = match dashboard_poll_interval_seconds {
             None => Some(settings.poll_interval_seconds),
             Some(existing) if existing == settings.poll_interval_seconds => Some(existing),
@@ -567,10 +780,77 @@ pub fn build_quant_dashboard_with_snapshots(
             continue;
         }
 
+        if settings.strategy_mode == "intraday_t" && !quote_is_intraday_t_realtime(quote, now) {
+            target.output_state = "quote_error".to_string();
+            target.last_error = Some("行情不是当前交易时段实时数据".to_string());
+            continue;
+        }
+
         let trend = classify_trend(&bars, settings.ma_short, settings.ma_long);
         target.trend_state = trend.state.clone();
         target.ma_short = trend.ma_short;
         target.ma_long = trend.ma_long;
+
+        if settings.strategy_mode == "intraday_t" {
+            target.strategy_mode = "intraday_t".to_string();
+            target.grid_zones = vec![];
+
+            let minute_bars = match &snapshot.minute_bars {
+                Ok(bars) => bars,
+                Err(err) => {
+                    target.output_state = "quote_error".to_string();
+                    target.last_error = Some(err.clone());
+                    continue;
+                }
+            };
+            let stats = analyze_intraday_t_windows(
+                minute_bars,
+                &current_date,
+                settings.intraday_lookback_days,
+                settings.intraday_high_time_min_count,
+                settings.intraday_low_time_min_count,
+            );
+            target.intraday_high_frequency_windows = stats.high_frequency_windows.clone();
+            target.intraday_low_frequency_windows = stats.low_frequency_windows.clone();
+            let completed_minute_bars = completed_intraday_bars(minute_bars, now);
+            target.intraday_position = intraday_t_day_position(
+                &completed_minute_bars,
+                &current_date,
+                quote.price,
+                INTRADAY_T_MIN_RANGE,
+            );
+
+            if stats.valid_days < 10 {
+                target.output_state = "watch".to_string();
+                target.current_trigger_zone = None;
+                target.intraday_reason = Some("分时统计数据不足".to_string());
+                continue;
+            }
+
+            let Some(position) = target.intraday_position else {
+                target.output_state = "watch".to_string();
+                target.current_trigger_zone = None;
+                target.intraday_reason = Some("当日波动不足，暂不触发".to_string());
+                continue;
+            };
+
+            let decision = decide_guarded_intraday_t_signal(IntradayTSignalInput {
+                now,
+                position,
+                stats: &stats,
+                sell_threshold: settings.sell_t_position_threshold,
+                buyback_threshold: settings.buyback_position_threshold,
+                current_price: quote.price,
+                minute_bars: &completed_minute_bars,
+                sold_at: sold_at.as_deref(),
+            });
+            target.output_state = decision.output_state;
+            target.current_trigger_zone = decision.current_trigger_zone;
+            target.intraday_reason = decision
+                .reason
+                .or_else(|| Some("未进入高发时段或日内位置未达阈值".to_string()));
+            continue;
+        }
 
         let Some(zones) = generate_grid_zones(&bars, settings.grid_lookback_days) else {
             target.output_state = "watch".to_string();
@@ -640,9 +920,10 @@ fn cooldown_allows_signal(
     now.signed_duration_since(last) >= chrono::Duration::minutes(5)
 }
 
-fn insert_auto_quant_signal(
+fn insert_quant_signal(
     conn: &Connection,
     target: &QuantTarget,
+    source: &str,
     direction: &str,
     trigger_zone: &str,
     key: &str,
@@ -656,7 +937,7 @@ fn insert_auto_quant_signal(
     conn.execute(
         "INSERT INTO quant_signals
             (code, name, market, direction, trigger_price, trend_state, source, trigger_zone, dedupe_key, triggered_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'auto_grid', ?7, ?8, ?9)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             &target.code,
             &target.name,
@@ -664,6 +945,7 @@ fn insert_auto_quant_signal(
             direction,
             trigger_price,
             &target.trend_state,
+            source,
             trigger_zone,
             key,
             &triggered_at,
@@ -700,7 +982,10 @@ fn refresh_quant_signals_with_snapshots(
         if !target.enabled {
             continue;
         }
-        if target.output_state != "buy_attention" && target.output_state != "sell_attention" {
+        if !matches!(
+            target.output_state.as_str(),
+            "buy_attention" | "sell_attention" | "sell_t_attention" | "buyback_attention"
+        ) {
             continue;
         }
         let Some(trigger_zone) = target.current_trigger_zone.as_deref() else {
@@ -717,11 +1002,47 @@ fn refresh_quant_signals_with_snapshots(
             continue;
         }
 
-        let signal =
-            insert_auto_quant_signal(conn, target, &target.output_state, trigger_zone, &key, now)?;
+        let source = if target.strategy_mode == "intraday_t" {
+            "intraday_t"
+        } else {
+            "auto_grid"
+        };
+        let signal = insert_quant_signal(
+            conn,
+            target,
+            source,
+            &target.output_state,
+            trigger_zone,
+            &key,
+            now,
+        )?;
+        let notification_body = if source == "intraday_t" {
+            target
+                .intraday_position
+                .map(|position| match target.output_state.as_str() {
+                    "sell_t_attention" => format!(
+                        "历史高点高发时段 {}，当前日内位置 {:.0}%，可关注卖T。仅供参考。",
+                        trigger_zone,
+                        position * 100.0
+                    ),
+                    "buyback_attention" => format!(
+                        "历史低点高发时段 {}，当前日内位置 {:.0}%，已满足止跌确认，可关注买回。仅供参考。",
+                        trigger_zone,
+                        position * 100.0
+                    ),
+                    _ => format!(
+                        "历史高发时段 {}，当前日内位置 {:.0}%，仅供参考。",
+                        trigger_zone,
+                        position * 100.0
+                    ),
+                })
+        } else {
+            None
+        };
         generated_signals.push(QuantGeneratedSignal {
             signal,
             desktop_notification_enabled: target.desktop_notification_enabled,
+            notification_body,
         });
     }
 
@@ -731,9 +1052,24 @@ fn refresh_quant_signals_with_snapshots(
     })
 }
 
+fn should_fetch_intraday_minute_bars(
+    strategy_mode: &str,
+    realtime_quote: &Result<RealtimeStockQuote, String>,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> bool {
+    if strategy_mode != "intraday_t" {
+        return false;
+    }
+
+    match realtime_quote {
+        Ok(quote) => quote_is_intraday_t_realtime(quote, now),
+        Err(_) => false,
+    }
+}
+
 async fn load_live_quant_snapshots(
     state: &State<'_, AppState>,
-    _now: chrono::DateTime<chrono::FixedOffset>,
+    now: chrono::DateTime<chrono::FixedOffset>,
 ) -> Result<Vec<QuantMarketSnapshot>, String> {
     let requests = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -743,25 +1079,72 @@ async fn load_live_quant_snapshots(
         for target in targets.into_iter().filter(|target| target.enabled) {
             let settings = load_quant_strategy_settings_row(&conn, &target.code, &target.market)?;
             let limit = settings.ma_long.max(settings.grid_lookback_days) as i64 + 1;
-            requests.push((target.code, target.market, limit));
+            let minute_limit = if settings.strategy_mode == "intraday_t" {
+                Some((settings.intraday_lookback_days * 60) as i64)
+            } else {
+                None
+            };
+            requests.push(QuantSnapshotRequest {
+                code: target.code,
+                market: target.market,
+                daily_limit: limit,
+                minute_limit,
+            });
         }
 
         requests
     };
 
-    let mut snapshots = Vec::with_capacity(requests.len());
-    for (code, market, limit) in requests {
-        let daily_bars = fetch_stock_kline(&code, "day", limit).await;
-        let realtime_quote = fetch_stock_realtime_quote(&code, &market).await;
-        snapshots.push(QuantMarketSnapshot {
-            code,
-            market,
-            daily_bars,
-            realtime_quote,
-        });
+    Ok(
+        fetch_quant_snapshots_concurrently(requests, move |request| {
+            fetch_live_quant_snapshot(request, now)
+        })
+        .await,
+    )
+}
+
+async fn fetch_live_quant_snapshot(
+    request: QuantSnapshotRequest,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> QuantMarketSnapshot {
+    let daily_bars = fetch_stock_kline(&request.code, "day", request.daily_limit).await;
+    let realtime_quote = fetch_stock_realtime_quote(&request.code, &request.market).await;
+    let minute_bars = match request.minute_limit {
+        Some(limit) if should_fetch_intraday_minute_bars("intraday_t", &realtime_quote, now) => {
+            fetch_stock_kline(&request.code, "5m", limit).await
+        }
+        _ => Ok(vec![]),
+    };
+
+    QuantMarketSnapshot {
+        code: request.code,
+        market: request.market,
+        daily_bars,
+        minute_bars,
+        realtime_quote,
+    }
+}
+
+async fn fetch_quant_snapshots_concurrently<F, Fut>(
+    requests: Vec<QuantSnapshotRequest>,
+    fetch: F,
+) -> Vec<QuantMarketSnapshot>
+where
+    F: Fn(QuantSnapshotRequest) -> Fut + Copy + Send + Sync + 'static,
+    Fut: Future<Output = QuantMarketSnapshot> + Send + 'static,
+{
+    let mut handles = Vec::with_capacity(requests.len());
+    for request in requests {
+        handles.push(tokio::spawn(fetch(request)));
     }
 
-    Ok(snapshots)
+    let mut snapshots = Vec::with_capacity(handles.len());
+    for handle in handles {
+        if let Ok(snapshot) = handle.await {
+            snapshots.push(snapshot);
+        }
+    }
+    snapshots
 }
 
 fn get_watchlist_by_id(conn: &Connection, id: i64) -> Result<QuantWatchlistItem, String> {
@@ -882,8 +1265,9 @@ pub fn list_quant_signals(
 
 #[tauri::command]
 pub async fn get_quant_dashboard(state: State<'_, AppState>) -> Result<QuantDashboard, String> {
+    let snapshot_now = china_market_now();
+    let snapshots = load_live_quant_snapshots(&state, snapshot_now).await?;
     let now = china_market_now();
-    let snapshots = load_live_quant_snapshots(&state, now).await?;
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     build_quant_dashboard_with_snapshots(&conn, snapshots, now)
 }
@@ -892,10 +1276,49 @@ pub async fn get_quant_dashboard(state: State<'_, AppState>) -> Result<QuantDash
 pub async fn refresh_quant_signals(
     state: State<'_, AppState>,
 ) -> Result<QuantRefreshResult, String> {
+    let snapshot_now = china_market_now();
+    let snapshots = load_live_quant_snapshots(&state, snapshot_now).await?;
     let now = china_market_now();
-    let snapshots = load_live_quant_snapshots(&state, now).await?;
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     refresh_quant_signals_with_snapshots(&conn, &snapshots, now)
+}
+
+#[tauri::command]
+pub async fn mark_intraday_t_sold(
+    state: State<'_, AppState>,
+    code: String,
+    market: String,
+) -> Result<(), String> {
+    let code = code.trim().to_string();
+    let market = market.trim().to_string();
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        validate_intraday_t_target(&conn, &code, &market)?;
+    }
+
+    let quote = fetch_stock_realtime_quote(&code, &market).await?;
+    let now = china_market_now();
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    mark_intraday_t_sold_in_conn(&conn, &code, &market, &quote, now)
+}
+
+#[tauri::command]
+pub async fn clear_intraday_t_sold(
+    state: State<'_, AppState>,
+    code: String,
+    market: String,
+) -> Result<(), String> {
+    let code = code.trim().to_string();
+    let market = market.trim().to_string();
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        validate_intraday_t_target(&conn, &code, &market)?;
+    }
+
+    let quote = fetch_stock_realtime_quote(&code, &market).await?;
+    let now = china_market_now();
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    clear_intraday_t_sold_in_conn(&conn, &code, &market, &quote, now)
 }
 
 #[tauri::command]
@@ -1033,6 +1456,12 @@ mod tests {
                 poll_interval_seconds INTEGER NOT NULL DEFAULT 60,
                 desktop_notification_enabled INTEGER NOT NULL DEFAULT 1,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                strategy_mode TEXT NOT NULL DEFAULT 'auto_grid',
+                intraday_lookback_days INTEGER NOT NULL DEFAULT 22,
+                intraday_high_time_min_count INTEGER NOT NULL DEFAULT 4,
+                intraday_low_time_min_count INTEGER NOT NULL DEFAULT 4,
+                sell_t_position_threshold REAL NOT NULL DEFAULT 0.70,
+                buyback_position_threshold REAL NOT NULL DEFAULT 0.30,
                 created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                 UNIQUE(code, market)
@@ -1051,6 +1480,14 @@ mod tests {
                 dedupe_key TEXT NOT NULL,
                 triggered_at TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+
+            CREATE TABLE quant_intraday_t_state (
+                code TEXT NOT NULL,
+                market TEXT NOT NULL,
+                trading_date TEXT NOT NULL,
+                sold_at TEXT NOT NULL,
+                PRIMARY KEY (code, market, trading_date)
             );
             ",
         )
@@ -1201,6 +1638,50 @@ mod tests {
         .unwrap();
     }
 
+    fn insert_settings_with_mode(
+        conn: &Connection,
+        code: &str,
+        market: &str,
+        enabled: bool,
+        desktop_notification_enabled: bool,
+        strategy_mode: &str,
+    ) {
+        conn.execute(
+            "INSERT INTO quant_strategy_settings
+                (code, market, enabled, desktop_notification_enabled, strategy_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                code,
+                market,
+                if enabled { 1 } else { 0 },
+                if desktop_notification_enabled { 1 } else { 0 },
+                strategy_mode,
+            ],
+        )
+        .unwrap();
+    }
+
+    fn insert_intraday_settings(conn: &Connection, code: &str) {
+        insert_settings_with_mode(conn, code, "cn", true, true, "intraday_t");
+    }
+
+    fn insert_intraday_settings_with_thresholds(
+        conn: &Connection,
+        code: &str,
+        sell_threshold: f64,
+        buyback_threshold: f64,
+    ) {
+        conn.execute(
+            "INSERT INTO quant_strategy_settings
+                (code, market, enabled, desktop_notification_enabled, strategy_mode,
+                 intraday_lookback_days, intraday_high_time_min_count, intraday_low_time_min_count,
+                 sell_t_position_threshold, buyback_position_threshold)
+             VALUES (?1, 'cn', 1, 1, 'intraday_t', 22, 4, 4, ?2, ?3)",
+            params![code, sell_threshold, buyback_threshold],
+        )
+        .unwrap();
+    }
+
     fn insert_signal(
         conn: &Connection,
         code: &str,
@@ -1255,6 +1736,116 @@ mod tests {
             volume: 1_000.0,
             change_pct: 0.0,
         }
+    }
+
+    fn minute_bar(date: &str, open: f64, high: f64, low: f64) -> KlineBar {
+        KlineBar {
+            date: date.to_string(),
+            open,
+            close: open,
+            low,
+            high,
+            volume: 1_000.0,
+            change_pct: 0.0,
+        }
+    }
+
+    fn intraday_t_valid_day(date: &str, high_time: &str, low_time: &str) -> Vec<KlineBar> {
+        let times = [
+            "09:30", "09:35", "09:40", "09:45", "09:50", "09:55", "10:00", "10:05", "10:10",
+            "10:15", "10:20", "10:25", "10:30", "10:35", "10:40", "10:45", "10:50", "10:55",
+            "11:00", "11:05", "11:10", "11:15", "11:20", "11:25", "11:30", "13:00", "13:05",
+            "13:10", "13:15", "13:20", "13:25", "13:30", "13:35", "13:40", "13:45", "13:50",
+            "13:55", "14:00", "14:05", "14:10", "14:15", "14:20", "14:25", "14:30", "14:35",
+            "14:40", "14:45", "14:50", "14:55", "15:00",
+        ];
+
+        times
+            .iter()
+            .enumerate()
+            .map(|(index, time)| {
+                let high = if *time == high_time {
+                    20.0
+                } else {
+                    12.0 + index as f64 * 0.01
+                };
+                let low = if *time == low_time {
+                    1.0
+                } else {
+                    8.0 + index as f64 * 0.01
+                };
+                minute_bar(&format!("{date} {time}"), 10.0, high, low)
+            })
+            .collect()
+    }
+
+    fn intraday_t_history(high_time: &str, low_time: &str, days: usize) -> Vec<KlineBar> {
+        let mut bars = Vec::new();
+        for day in 1..=days {
+            bars.extend(intraday_t_valid_day(
+                &format!("2026-06-{day:02}"),
+                high_time,
+                low_time,
+            ));
+        }
+        bars
+    }
+
+    fn intraday_t_current_day(low: f64, high: f64) -> Vec<KlineBar> {
+        vec![minute_bar("2026-07-07 09:35", 10.0, high, low)]
+    }
+
+    fn intraday_t_minute_bars(
+        high_time: &str,
+        low_time: &str,
+        days: usize,
+        current_low: f64,
+        current_high: f64,
+    ) -> Vec<KlineBar> {
+        let mut bars = intraday_t_history(high_time, low_time, days);
+        bars.extend(intraday_t_current_day(current_low, current_high));
+        bars
+    }
+
+    fn intraday_t_buyback_minute_bars() -> Vec<KlineBar> {
+        let mut bars = intraday_t_history("09:35", "13:40", 10);
+        bars.extend([
+            minute_bar("2026-07-07 09:30", 10.0, 12.0, 10.0),
+            minute_bar("2026-07-07 09:35", 10.0, 11.0, 10.0),
+            minute_bar("2026-07-07 13:00", 10.0, 11.0, 10.2),
+        ]);
+        bars
+    }
+
+    fn insert_intraday_t_sale_state(conn: &Connection, code: &str, sold_at: &str) {
+        conn.execute(
+            "INSERT INTO quant_intraday_t_state (code, market, trading_date, sold_at)
+             VALUES (?1, 'cn', '2026-07-07', ?2)",
+            params![code, sold_at],
+        )
+        .unwrap();
+    }
+
+    fn daily_bars_from_closes(closes: &[f64]) -> Vec<KlineBar> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(index, close)| bar(&format!("2026-06-{:02}", index + 1), *close))
+            .collect()
+    }
+
+    fn bullish_daily_bars() -> Vec<KlineBar> {
+        daily_bars_from_closes(&[
+            9.0, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 10.0, 10.1, 10.2, 10.3, 10.4, 10.5,
+            10.6, 10.7, 10.8, 10.9,
+        ])
+    }
+
+    fn bearish_daily_bars() -> Vec<KlineBar> {
+        daily_bars_from_closes(&[
+            20.0, 19.8, 19.6, 19.4, 19.2, 19.0, 18.8, 18.6, 18.4, 18.2, 18.0, 17.8, 17.6, 17.4,
+            17.2, 17.0, 16.8, 16.6, 16.4, 16.2,
+        ])
     }
 
     fn bars_for_buy_attention() -> Vec<KlineBar> {
@@ -1326,7 +1917,28 @@ mod tests {
             code: code.to_string(),
             market: market.to_string(),
             daily_bars,
+            minute_bars: Ok(vec![]),
             realtime_quote,
+        }
+    }
+
+    fn snapshot_with_minute_bars(
+        code: &str,
+        daily_bars: Vec<KlineBar>,
+        minute_bars: Result<Vec<KlineBar>, String>,
+        price: f64,
+        now: chrono::DateTime<chrono::FixedOffset>,
+    ) -> QuantMarketSnapshot {
+        QuantMarketSnapshot {
+            code: code.to_string(),
+            market: "cn".to_string(),
+            daily_bars: Ok(daily_bars),
+            minute_bars,
+            realtime_quote: Ok(realtime_quote_with_status(
+                price,
+                Some(now.timestamp()),
+                Some("5"),
+            )),
         }
     }
 
@@ -1361,6 +1973,128 @@ mod tests {
             row.get(0)
         })
         .unwrap()
+    }
+
+    #[test]
+    fn intraday_t_sale_acknowledgement_marks_dashboard_state_and_can_be_cleared() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000107", "T State", "cn", true);
+        insert_intraday_settings(&conn, "000107");
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+        let quote = realtime_quote_with_status(10.0, Some(now.timestamp()), Some("5"));
+
+        mark_intraday_t_sold_in_conn(&conn, "000107", "cn", &quote, now).unwrap();
+
+        let dashboard = build_quant_dashboard_with_snapshots(&conn, vec![], now).unwrap();
+        assert!(dashboard.targets[0].has_sold_t_today);
+        let sold_at: String = conn
+            .query_row(
+                "SELECT sold_at FROM quant_intraday_t_state
+                 WHERE code = '000107' AND market = 'cn' AND trading_date = '2026-07-07'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(sold_at, "2026-07-07 10:00:00");
+
+        clear_intraday_t_sold_in_conn(&conn, "000107", "cn", &quote, now).unwrap();
+
+        let dashboard = build_quant_dashboard_with_snapshots(&conn, vec![], now).unwrap();
+        assert!(!dashboard.targets[0].has_sold_t_today);
+    }
+
+    #[test]
+    fn mark_intraday_t_sold_rejects_stale_quote_without_inserting_state() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000118", "Stale Mark", "cn", true);
+        insert_intraday_settings(&conn, "000118");
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+        let quote = realtime_quote_with_status(
+            10.0,
+            Some(exchange_timestamp(2026, 7, 6, 10, 0, 0)),
+            Some("5"),
+        );
+
+        let err = mark_intraday_t_sold_in_conn(&conn, "000118", "cn", &quote, now).unwrap_err();
+
+        assert!(err.contains("实时数据"), "unexpected error: {err}");
+        let state_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(state_count, 0);
+    }
+
+    #[test]
+    fn mark_intraday_t_sold_rejects_unsupported_market_without_inserting_state() {
+        let conn = test_conn();
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+        let quote = realtime_quote_with_status(10.0, Some(now.timestamp()), Some("5"));
+
+        let err = mark_intraday_t_sold_in_conn(&conn, "00700", "hk", &quote, now).unwrap_err();
+
+        assert!(err.contains("unsupported market"), "unexpected error: {err}");
+        let state_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(state_count, 0);
+    }
+
+    #[test]
+    fn mark_intraday_t_sold_rejects_missing_target_without_inserting_state() {
+        let conn = test_conn();
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+        let quote = realtime_quote_with_status(10.0, Some(now.timestamp()), Some("5"));
+
+        let err = mark_intraday_t_sold_in_conn(&conn, "000119", "cn", &quote, now).unwrap_err();
+
+        assert!(err.contains("量化目标不存在"), "unexpected error: {err}");
+        let state_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(state_count, 0);
+    }
+
+    #[test]
+    fn mark_intraday_t_sold_rejects_auto_grid_target_without_inserting_state() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000120", "Auto Grid Mark", "cn", true);
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+        let quote = realtime_quote_with_status(10.0, Some(now.timestamp()), Some("5"));
+
+        let err = mark_intraday_t_sold_in_conn(&conn, "000120", "cn", &quote, now).unwrap_err();
+
+        assert!(err.contains("未启用日内T策略"), "unexpected error: {err}");
+        let state_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(state_count, 0);
+    }
+
+    #[test]
+    fn clear_intraday_t_sold_rejects_stale_quote_without_deleting_same_day_state() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000121", "Stale Clear", "cn", true);
+        insert_intraday_settings(&conn, "000121");
+        insert_intraday_t_sale_state(&conn, "000121", "2026-07-07 09:45:00");
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+        let quote = realtime_quote_with_status(
+            10.0,
+            Some(exchange_timestamp(2026, 7, 6, 10, 0, 0)),
+            Some("5"),
+        );
+
+        let err = clear_intraday_t_sold_in_conn(&conn, "000121", "cn", &quote, now).unwrap_err();
+
+        assert!(err.contains("实时数据"), "unexpected error: {err}");
+        let sold_at: String = conn
+            .query_row(
+                "SELECT sold_at FROM quant_intraday_t_state
+                 WHERE code = '000121' AND market = 'cn' AND trading_date = '2026-07-07'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(sold_at, "2026-07-07 09:45:00");
     }
 
     #[test]
@@ -1459,6 +2193,211 @@ mod tests {
         assert_eq!(failed.output_state, "quote_error");
         assert_eq!(failed.last_error.as_deref(), Some("quote failed"));
         assert_eq!(watched.output_state, "watch");
+    }
+
+    #[test]
+    fn intraday_t_dashboard_emits_sell_attention_with_reason_and_position() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000101", "Sell T", "cn", true);
+        insert_intraday_settings(&conn, "000101");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000101",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                11.6,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.strategy_mode, "intraday_t");
+        assert_eq!(target.output_state, "sell_t_attention");
+        assert_eq!(target.current_trigger_zone.as_deref(), Some("09:30-09:45"));
+        assert!(target.grid_zones.is_empty());
+        assert!(target
+            .intraday_high_frequency_windows
+            .contains(&"09:30-09:45".to_string()));
+        assert!((target.intraday_position.unwrap() - 0.8).abs() < 1e-9);
+        let reason = target.intraday_reason.as_deref().unwrap();
+        assert!(reason.contains("卖T确认"));
+        assert!(reason.contains("历史"));
+    }
+
+    #[test]
+    fn intraday_t_dashboard_emits_buyback_attention_with_reason_and_position() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000102", "Buyback", "cn", true);
+        insert_intraday_settings(&conn, "000102");
+        insert_intraday_t_sale_state(&conn, "000102", "2026-07-07 09:00:00");
+        let now = cn_datetime(2026, 7, 7, 13, 40, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000102",
+                bullish_daily_bars(),
+                Ok(intraday_t_buyback_minute_bars()),
+                10.4,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "buyback_attention");
+        assert_eq!(target.current_trigger_zone.as_deref(), Some("13:35-14:30"));
+        assert!(target
+            .intraday_low_frequency_windows
+            .contains(&"13:35-14:30".to_string()));
+        assert!((target.intraday_position.unwrap() - 0.2).abs() < 1e-9);
+        let reason = target.intraday_reason.as_deref().unwrap();
+        assert!(reason.contains("买回确认"));
+        assert!(reason.contains("历史"));
+    }
+
+    #[test]
+    fn intraday_t_dashboard_requires_persisted_sale_before_buyback() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000108", "Guarded Buyback", "cn", true);
+        insert_intraday_settings(&conn, "000108");
+        let now = cn_datetime(2026, 7, 7, 9, 41, 0);
+        let mut minute_bars = intraday_t_history("10:00", "09:35", 10);
+        minute_bars.extend([
+            minute_bar("2026-07-07 09:30", 100.0, 101.0, 100.0),
+            minute_bar("2026-07-07 09:35", 100.0, 101.0, 100.0),
+            minute_bar("2026-07-07 09:40", 100.0, 102.0, 100.2),
+        ]);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000108",
+                bullish_daily_bars(),
+                Ok(minute_bars),
+                100.6,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        assert!(!dashboard.targets[0].has_sold_t_today);
+        assert_eq!(dashboard.targets[0].output_state, "watch");
+    }
+
+    #[test]
+    fn intraday_t_insufficient_history_stays_watch_with_reason() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000103", "Short History", "cn", true);
+        insert_intraday_settings(&conn, "000103");
+        let now = cn_datetime(2026, 7, 7, 9, 35, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000103",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "13:40", 9, 10.0, 12.0)),
+                11.6,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "watch");
+        assert_eq!(target.current_trigger_zone, None);
+        assert_eq!(target.intraday_reason.as_deref(), Some("分时统计数据不足"));
+    }
+
+    #[test]
+    fn intraday_t_narrow_current_range_stays_watch_with_reason() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000104", "Narrow", "cn", true);
+        insert_intraday_settings(&conn, "000104");
+        let now = cn_datetime(2026, 7, 7, 9, 35, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000104",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 10.00001)),
+                10.000005,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "watch");
+        assert_eq!(target.current_trigger_zone, None);
+        assert_eq!(
+            target.intraday_reason.as_deref(),
+            Some("当日波动不足，暂不触发")
+        );
+    }
+
+    #[test]
+    fn intraday_t_ordinary_watch_includes_display_reason() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000105", "Watch", "cn", true);
+        insert_intraday_settings(&conn, "000105");
+        let now = cn_datetime(2026, 7, 7, 10, 0, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000105",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                11.0,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "watch");
+        assert_eq!(target.current_trigger_zone, None);
+        assert_eq!(
+            target.intraday_reason.as_deref(),
+            Some("缺少日内T确认数据，暂不触发")
+        );
+    }
+
+    #[test]
+    fn intraday_t_weak_bearish_trend_does_not_block_sell_t() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000106", "Weak", "cn", true);
+        insert_intraday_settings(&conn, "000106");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000106",
+                bearish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                11.6,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        assert_eq!(dashboard.targets[0].trend_state, "bearish");
+        assert_eq!(dashboard.targets[0].output_state, "sell_t_attention");
     }
 
     #[test]
@@ -1780,6 +2719,379 @@ mod tests {
     }
 
     #[test]
+    fn intraday_t_refresh_persists_intraday_signal_source_and_time_bucket() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000107", "Refresh T", "cn", true);
+        insert_intraday_settings(&conn, "000107");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+        let snapshots = vec![snapshot_with_minute_bars(
+            "000107",
+            bullish_daily_bars(),
+            Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+            11.6,
+            now,
+        )];
+
+        let result = refresh_quant_signals_with_snapshots(&conn, &snapshots, now).unwrap();
+
+        assert_eq!(result.generated_signals.len(), 1);
+        let generated = &result.generated_signals[0];
+        assert_eq!(generated.signal.direction, "sell_t_attention");
+        assert_eq!(generated.signal.source, "intraday_t");
+        assert_eq!(generated.signal.trigger_zone, "09:30-09:45");
+        let body = generated.notification_body.as_deref().unwrap();
+        assert!(body.contains("历史高点高发时段"));
+        assert!(body.contains("09:30-09:45"));
+        assert!(body.contains("80%"));
+        assert!(body.contains("可关注卖T"));
+        assert_eq!(signal_count(&conn), 1);
+        let persisted = latest_signal_row(&conn);
+        assert_eq!(persisted.source, "intraday_t");
+        assert_eq!(persisted.trigger_zone, "09:30-09:45");
+    }
+
+    #[test]
+    fn intraday_t_refresh_does_not_persist_or_generate_sell_t_watch() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000117", "Opening Watch", "cn", true);
+        insert_intraday_settings(&conn, "000117");
+        let now = cn_datetime(2026, 7, 7, 9, 34, 0);
+        let mut minute_bars = intraday_t_history("09:35", "13:40", 10);
+        minute_bars.push(minute_bar("2026-07-07 09:30", 10.0, 12.0, 10.0));
+        let snapshots = vec![snapshot_with_minute_bars(
+            "000117",
+            bullish_daily_bars(),
+            Ok(minute_bars),
+            11.6,
+            now,
+        )];
+
+        let result = refresh_quant_signals_with_snapshots(&conn, &snapshots, now).unwrap();
+
+        assert_eq!(result.dashboard.targets[0].output_state, "sell_t_watch");
+        assert!(result.generated_signals.is_empty());
+        assert_eq!(signal_count(&conn), 0);
+    }
+
+    #[test]
+    fn intraday_t_refresh_buyback_notification_body_names_low_frequency_window() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000116", "Buyback Body", "cn", true);
+        insert_intraday_settings(&conn, "000116");
+        insert_intraday_t_sale_state(&conn, "000116", "2026-07-07 09:00:00");
+        let now = cn_datetime(2026, 7, 7, 13, 40, 0);
+        let snapshots = vec![snapshot_with_minute_bars(
+            "000116",
+            bullish_daily_bars(),
+            Ok(intraday_t_buyback_minute_bars()),
+            10.4,
+            now,
+        )];
+
+        let result = refresh_quant_signals_with_snapshots(&conn, &snapshots, now).unwrap();
+
+        assert_eq!(result.generated_signals.len(), 1);
+        let generated = &result.generated_signals[0];
+        assert_eq!(generated.signal.direction, "buyback_attention");
+        assert_eq!(generated.signal.trigger_zone, "13:35-14:30");
+        let body = generated.notification_body.as_deref().unwrap();
+        assert!(body.contains("历史低点高发时段"));
+        assert!(body.contains("13:35-14:30"));
+        assert!(body.contains("20%"));
+        assert!(body.contains("已满足止跌确认"));
+        assert!(body.contains("可关注买回"));
+    }
+
+    #[test]
+    fn intraday_t_refresh_rejects_stale_or_non_realtime_quote() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000108", "Stale T", "cn", true);
+        insert_intraday_settings(&conn, "000108");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+        let snapshots = vec![QuantMarketSnapshot {
+            code: "000108".to_string(),
+            market: "cn".to_string(),
+            daily_bars: Ok(bullish_daily_bars()),
+            minute_bars: Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+            realtime_quote: Ok(realtime_quote_with_status(
+                11.6,
+                Some(exchange_timestamp(2026, 7, 6, 9, 35, 0)),
+                Some("5"),
+            )),
+        }];
+
+        let result = refresh_quant_signals_with_snapshots(&conn, &snapshots, now).unwrap();
+
+        assert!(result.generated_signals.is_empty());
+        assert_eq!(result.dashboard.targets[0].output_state, "quote_error");
+        assert_eq!(signal_count(&conn), 0);
+    }
+
+    #[test]
+    fn intraday_t_minute_fetch_requires_strict_realtime_quote() {
+        let now = cn_datetime(2026, 7, 7, 9, 35, 0);
+
+        assert!(!should_fetch_intraday_minute_bars(
+            "intraday_t",
+            &Ok(realtime_quote_with_status(11.6, None, Some("交易中"))),
+            now,
+        ));
+        assert!(should_fetch_intraday_minute_bars(
+            "intraday_t",
+            &Ok(realtime_quote_with_status(
+                11.6,
+                Some(now.timestamp()),
+                Some("交易中"),
+            )),
+            now,
+        ));
+        assert!(!should_fetch_intraday_minute_bars(
+            "auto_grid",
+            &Ok(realtime_quote_with_status(11.6, None, Some("交易中"))),
+            now,
+        ));
+        assert!(!should_fetch_intraday_minute_bars(
+            "intraday_t",
+            &Ok(realtime_quote_with_status(
+                11.6,
+                Some(exchange_timestamp(2026, 7, 6, 9, 35, 0)),
+                Some("5"),
+            )),
+            now,
+        ));
+        assert!(!should_fetch_intraday_minute_bars(
+            "intraday_t",
+            &Err("quote failed".to_string()),
+            now,
+        ));
+    }
+
+    #[test]
+    fn intraday_t_market_closed_persists_no_generated_signal() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000109", "Closed T", "cn", true);
+        insert_intraday_settings(&conn, "000109");
+        let now = cn_datetime(2026, 7, 7, 15, 1, 0);
+        let snapshots = vec![snapshot_with_minute_bars(
+            "000109",
+            bullish_daily_bars(),
+            Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+            11.6,
+            cn_datetime(2026, 7, 7, 9, 36, 0),
+        )];
+
+        let result = refresh_quant_signals_with_snapshots(&conn, &snapshots, now).unwrap();
+
+        assert!(result.generated_signals.is_empty());
+        assert_eq!(signal_count(&conn), 0);
+    }
+
+    #[test]
+    fn intraday_t_cooldown_dedupes_same_stock_market_direction_time_bucket() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000110", "Cooldown T", "cn", true);
+        insert_intraday_settings(&conn, "000110");
+        let snapshots = vec![snapshot_with_minute_bars(
+            "000110",
+            bullish_daily_bars(),
+            Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+            11.6,
+            cn_datetime(2026, 7, 7, 9, 36, 0),
+        )];
+
+        let first = refresh_quant_signals_with_snapshots(
+            &conn,
+            &snapshots,
+            cn_datetime(2026, 7, 7, 9, 36, 0),
+        )
+        .unwrap();
+        let second = refresh_quant_signals_with_snapshots(
+            &conn,
+            &snapshots,
+            cn_datetime(2026, 7, 7, 9, 39, 0),
+        )
+        .unwrap();
+
+        assert_eq!(first.generated_signals.len(), 1);
+        assert!(second.generated_signals.is_empty());
+        assert_eq!(signal_count(&conn), 1);
+    }
+
+    #[test]
+    fn intraday_t_cooldown_allows_different_direction_or_time_bucket() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000111", "Direction T", "cn", true);
+        insert_intraday_settings(&conn, "000111");
+        conn.execute(
+            "INSERT INTO quant_signals
+                (code, name, market, direction, trigger_price, trend_state, source, trigger_zone, dedupe_key, triggered_at)
+              VALUES ('000111', 'Direction T', 'cn', 'buyback_attention', 11.6, 'bullish', 'intraday_t', '09:30-09:45', ?1, '2026-07-07 09:34:00')",
+            params![dedupe_key("000111", "cn", "buyback_attention", "09:30-09:45")],
+        )
+        .unwrap();
+        let direction_result = refresh_quant_signals_with_snapshots(
+            &conn,
+            &[snapshot_with_minute_bars(
+                "000111",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                11.6,
+                cn_datetime(2026, 7, 7, 9, 36, 0),
+            )],
+            cn_datetime(2026, 7, 7, 9, 36, 0),
+        )
+        .unwrap();
+        assert_eq!(direction_result.generated_signals.len(), 1);
+        assert_eq!(
+            direction_result.generated_signals[0].signal.direction,
+            "sell_t_attention"
+        );
+
+        let conn = test_conn();
+        insert_watchlist(&conn, "000112", "Bucket T", "cn", true);
+        insert_intraday_settings(&conn, "000112");
+        conn.execute(
+            "INSERT INTO quant_signals
+                (code, name, market, direction, trigger_price, trend_state, source, trigger_zone, dedupe_key, triggered_at)
+             VALUES ('000112', 'Bucket T', 'cn', 'sell_t_attention', 11.6, 'bullish', 'intraday_t', '09:30-09:45', ?1, '2026-07-07 09:46:00')",
+            params![dedupe_key("000112", "cn", "sell_t_attention", "09:30-09:45")],
+        )
+        .unwrap();
+        let bucket_result = refresh_quant_signals_with_snapshots(
+            &conn,
+            &[snapshot_with_minute_bars(
+                "000112",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:50", "13:40", 10, 10.0, 12.0)),
+                11.6,
+                cn_datetime(2026, 7, 7, 9, 51, 0),
+            )],
+            cn_datetime(2026, 7, 7, 9, 51, 0),
+        )
+        .unwrap();
+        assert_eq!(bucket_result.generated_signals.len(), 1);
+        assert_eq!(
+            bucket_result.generated_signals[0].signal.trigger_zone,
+            "09:50-10:30"
+        );
+    }
+
+    #[test]
+    fn intraday_t_contradictory_conditions_stay_watch_with_defensive_reason() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000113", "Conflict T", "cn", true);
+        insert_intraday_settings_with_thresholds(&conn, "000113", 0.5, 0.5);
+        let now = cn_datetime(2026, 7, 7, 9, 35, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![snapshot_with_minute_bars(
+                "000113",
+                bullish_daily_bars(),
+                Ok(intraday_t_minute_bars("09:35", "09:35", 10, 10.0, 12.0)),
+                11.0,
+                now,
+            )],
+            now,
+        )
+        .unwrap();
+
+        let target = &dashboard.targets[0];
+        assert_eq!(target.output_state, "watch");
+        assert_eq!(target.current_trigger_zone, None);
+        assert!(target.intraday_reason.is_some());
+    }
+
+    #[test]
+    fn intraday_t_and_auto_grid_modes_are_isolated() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000114", "Auto", "cn", true);
+        insert_watchlist(&conn, "000115", "Do T", "cn", true);
+        insert_intraday_settings(&conn, "000115");
+        let now = cn_datetime(2026, 7, 7, 9, 36, 0);
+
+        let dashboard = build_quant_dashboard_with_snapshots(
+            &conn,
+            vec![
+                refresh_buy_snapshot("000114"),
+                snapshot_with_minute_bars(
+                    "000115",
+                    bullish_daily_bars(),
+                    Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                    11.6,
+                    now,
+                ),
+            ],
+            now,
+        )
+        .unwrap();
+
+        let auto = dashboard
+            .targets
+            .iter()
+            .find(|target| target.code == "000114")
+            .unwrap();
+        let intraday = dashboard
+            .targets
+            .iter()
+            .find(|target| target.code == "000115")
+            .unwrap();
+
+        assert_eq!(auto.strategy_mode, "auto_grid");
+        assert!(!auto.grid_zones.is_empty());
+        assert!(auto.intraday_reason.is_none());
+        assert_eq!(intraday.strategy_mode, "intraday_t");
+        assert_eq!(intraday.output_state, "sell_t_attention");
+        assert!(intraday.grid_zones.is_empty());
+    }
+
+    #[tokio::test]
+    async fn quant_snapshot_fetches_targets_concurrently() {
+        use std::time::{Duration, Instant};
+
+        let requests = vec![
+            QuantSnapshotRequest {
+                code: "000201".to_string(),
+                market: "cn".to_string(),
+                daily_limit: 21,
+                minute_limit: None,
+            },
+            QuantSnapshotRequest {
+                code: "000202".to_string(),
+                market: "cn".to_string(),
+                daily_limit: 21,
+                minute_limit: None,
+            },
+            QuantSnapshotRequest {
+                code: "000203".to_string(),
+                market: "cn".to_string(),
+                daily_limit: 21,
+                minute_limit: None,
+            },
+        ];
+
+        let start = Instant::now();
+        let snapshots = fetch_quant_snapshots_concurrently(requests, |request| async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            QuantMarketSnapshot {
+                code: request.code,
+                market: request.market,
+                daily_bars: Ok(bullish_daily_bars()),
+                minute_bars: Ok(vec![]),
+                realtime_quote: Ok(realtime_quote(10.0)),
+            }
+        })
+        .await;
+
+        assert_eq!(snapshots.len(), 3);
+        assert!(
+            start.elapsed() < Duration::from_millis(220),
+            "expected concurrent fetches, took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
     fn strict_realtime_open_market_status_without_timestamp_allows_signal() {
         let conn = test_conn();
         insert_holding(&conn, "600000", "浦发银行", "cn", "stock");
@@ -2061,6 +3373,230 @@ mod tests {
     }
 
     #[test]
+    fn targets_default_to_auto_grid_when_settings_are_created() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000008", "Default Mode", "cn", true);
+
+        let targets = merge_quant_targets(&conn).unwrap();
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].strategy_mode, "auto_grid");
+        let stored_mode: String = conn
+            .query_row(
+                "SELECT strategy_mode FROM quant_strategy_settings WHERE code = '000008' AND market = 'cn'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored_mode, "auto_grid");
+    }
+
+    #[test]
+    fn merge_targets_reads_existing_strategy_mode() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000009", "Intraday Mode", "cn", true);
+        insert_settings_with_mode(&conn, "000009", "cn", true, true, "intraday_t");
+
+        let targets = merge_quant_targets(&conn).unwrap();
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].strategy_mode, "intraday_t");
+    }
+
+    #[test]
+    fn dashboard_read_only_targets_read_existing_strategy_mode() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000010", "Read Only Mode", "cn", true);
+        insert_settings_with_mode(&conn, "000010", "cn", true, true, "intraday_t");
+
+        let dashboard =
+            build_quant_dashboard_with_snapshots(&conn, vec![], cn_datetime(2026, 1, 5, 10, 0, 0))
+                .unwrap();
+
+        assert_eq!(dashboard.targets.len(), 1);
+        assert_eq!(dashboard.targets[0].strategy_mode, "intraday_t");
+    }
+
+    #[test]
+    fn update_settings_persists_and_returns_strategy_mode() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000011", "Update Mode", "cn", true);
+
+        let target = update_quant_strategy_settings_in_conn(
+            &conn,
+            "000011".to_string(),
+            "cn".to_string(),
+            QuantStrategySettingsUpdate {
+                enabled: true,
+                desktop_notification_enabled: true,
+                strategy_mode: Some("intraday_t".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(target.strategy_mode, "intraday_t");
+        let stored_mode: String = conn
+            .query_row(
+                "SELECT strategy_mode FROM quant_strategy_settings WHERE code = '000011' AND market = 'cn'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored_mode, "intraday_t");
+    }
+
+    #[test]
+    fn update_settings_with_none_preserves_existing_strategy_mode() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000012", "Preserve Mode", "cn", true);
+        insert_settings_with_mode(&conn, "000012", "cn", true, true, "intraday_t");
+
+        let target = update_quant_strategy_settings_in_conn(
+            &conn,
+            "000012".to_string(),
+            "cn".to_string(),
+            QuantStrategySettingsUpdate {
+                enabled: false,
+                desktop_notification_enabled: false,
+                strategy_mode: None,
+            },
+        )
+        .unwrap();
+
+        assert!(!target.enabled);
+        assert!(!target.desktop_notification_enabled);
+        assert_eq!(target.strategy_mode, "intraday_t");
+        let stored_mode: String = conn
+            .query_row(
+                "SELECT strategy_mode FROM quant_strategy_settings WHERE code = '000012' AND market = 'cn'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored_mode, "intraday_t");
+    }
+
+    #[test]
+    fn update_settings_with_none_defaults_new_settings_to_auto_grid() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000013", "Default Update Mode", "cn", true);
+
+        let target = update_quant_strategy_settings_in_conn(
+            &conn,
+            "000013".to_string(),
+            "cn".to_string(),
+            QuantStrategySettingsUpdate {
+                enabled: true,
+                desktop_notification_enabled: true,
+                strategy_mode: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(target.strategy_mode, "auto_grid");
+        let stored_mode: String = conn
+            .query_row(
+                "SELECT strategy_mode FROM quant_strategy_settings WHERE code = '000013' AND market = 'cn'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored_mode, "auto_grid");
+    }
+
+    #[test]
+    fn update_settings_rejects_invalid_strategy_mode_without_writing() {
+        let conn = test_conn();
+        insert_watchlist(&conn, "000014", "Invalid Mode", "cn", true);
+
+        let err = update_quant_strategy_settings_in_conn(
+            &conn,
+            "000014".to_string(),
+            "cn".to_string(),
+            QuantStrategySettingsUpdate {
+                enabled: true,
+                desktop_notification_enabled: true,
+                strategy_mode: Some("invalid_mode".to_string()),
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            err.contains("strategy_mode") || err.contains("策略"),
+            "unexpected error: {err}"
+        );
+        let settings_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM quant_strategy_settings WHERE code = '000014' AND market = 'cn'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(settings_count, 0);
+    }
+
+    #[test]
+    fn strategy_mode_settings_row_loads_intraday_numeric_defaults_and_values() {
+        let conn = test_conn();
+
+        let defaults = load_quant_strategy_settings_row(&conn, "000015", "cn").unwrap();
+        assert_eq!(defaults.strategy_mode, "auto_grid");
+        assert_eq!(defaults.intraday_lookback_days, 22);
+        assert_eq!(defaults.intraday_high_time_min_count, 4);
+        assert_eq!(defaults.intraday_low_time_min_count, 4);
+        assert!((defaults.sell_t_position_threshold - 0.70).abs() < 1e-9);
+        assert!((defaults.buyback_position_threshold - 0.30).abs() < 1e-9);
+
+        conn.execute(
+            "INSERT INTO quant_strategy_settings
+                (code, market, strategy_mode, intraday_lookback_days,
+                 intraday_high_time_min_count, intraday_low_time_min_count,
+                 sell_t_position_threshold, buyback_position_threshold)
+             VALUES ('000016', 'cn', 'intraday_t', 18, 3, 5, 0.75, 0.25)",
+            [],
+        )
+        .unwrap();
+
+        let custom = load_quant_strategy_settings_row(&conn, "000016", "cn").unwrap();
+        assert_eq!(custom.strategy_mode, "intraday_t");
+        assert_eq!(custom.intraday_lookback_days, 18);
+        assert_eq!(custom.intraday_high_time_min_count, 3);
+        assert_eq!(custom.intraday_low_time_min_count, 5);
+        assert!((custom.sell_t_position_threshold - 0.75).abs() < 1e-9);
+        assert!((custom.buyback_position_threshold - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn strategy_mode_settings_row_clamps_invalid_intraday_numeric_values() {
+        let conn = test_conn();
+        conn.execute(
+            "INSERT INTO quant_strategy_settings
+                (code, market, strategy_mode, intraday_lookback_days,
+                 intraday_high_time_min_count, intraday_low_time_min_count,
+                 sell_t_position_threshold, buyback_position_threshold)
+             VALUES
+                ('000017', 'cn', 'intraday_t', -5, -3, 0, -0.1, 1.5),
+                ('000018', 'cn', 'intraday_t', 999, 999, 999, 0.8, 0.2)",
+            [],
+        )
+        .unwrap();
+
+        let invalid = load_quant_strategy_settings_row(&conn, "000017", "cn").unwrap();
+        assert_eq!(invalid.intraday_lookback_days, 22);
+        assert_eq!(invalid.intraday_high_time_min_count, 4);
+        assert_eq!(invalid.intraday_low_time_min_count, 4);
+        assert!((invalid.sell_t_position_threshold - 0.70).abs() < 1e-9);
+        assert!((invalid.buyback_position_threshold - 0.30).abs() < 1e-9);
+
+        let huge = load_quant_strategy_settings_row(&conn, "000018", "cn").unwrap();
+        assert_eq!(huge.intraday_lookback_days, 60);
+        assert_eq!(huge.intraday_high_time_min_count, 60);
+        assert_eq!(huge.intraday_low_time_min_count, 60);
+        assert!((huge.sell_t_position_threshold - 0.8).abs() < 1e-9);
+        assert!((huge.buyback_position_threshold - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
     fn desktop_notification_setting_does_not_disable_signal_generation() {
         let conn = test_conn();
         insert_watchlist(&conn, "000006", "Quiet Watch", "cn", true);
@@ -2072,6 +3608,7 @@ mod tests {
             QuantStrategySettingsUpdate {
                 enabled: true,
                 desktop_notification_enabled: false,
+                strategy_mode: None,
             },
         )
         .unwrap();
@@ -2092,6 +3629,7 @@ mod tests {
             QuantStrategySettingsUpdate {
                 enabled: false,
                 desktop_notification_enabled: false,
+                strategy_mode: None,
             },
         )
         .unwrap_err();
@@ -2120,6 +3658,7 @@ mod tests {
             QuantStrategySettingsUpdate {
                 enabled: true,
                 desktop_notification_enabled: true,
+                strategy_mode: None,
             },
         );
 
