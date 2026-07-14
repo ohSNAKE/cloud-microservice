@@ -1072,7 +1072,9 @@ fn should_fetch_intraday_minute_bars(strategy_mode: &str) -> bool {
     strategy_mode == "intraday_t"
 }
 
-async fn load_live_quant_snapshots(state: &State<'_, AppState>) -> Result<Vec<QuantMarketSnapshot>, String> {
+async fn load_live_quant_snapshots(
+    state: &State<'_, AppState>,
+) -> Result<Vec<QuantMarketSnapshot>, String> {
     let requests = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let targets = merge_quant_targets_read_only(&conn)?;
@@ -1097,9 +1099,7 @@ async fn load_live_quant_snapshots(state: &State<'_, AppState>) -> Result<Vec<Qu
         requests
     };
 
-    Ok(
-        fetch_quant_snapshots_concurrently(requests, fetch_live_quant_snapshot).await,
-    )
+    Ok(fetch_quant_snapshots_concurrently(requests, fetch_live_quant_snapshot).await)
 }
 
 async fn fetch_live_quant_snapshot(request: QuantSnapshotRequest) -> QuantMarketSnapshot {
@@ -2013,7 +2013,9 @@ mod tests {
 
         assert!(err.contains("实时数据"), "unexpected error: {err}");
         let state_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(state_count, 0);
     }
@@ -2026,9 +2028,14 @@ mod tests {
 
         let err = mark_intraday_t_sold_in_conn(&conn, "00700", "hk", &quote, now).unwrap_err();
 
-        assert!(err.contains("unsupported market"), "unexpected error: {err}");
+        assert!(
+            err.contains("unsupported market"),
+            "unexpected error: {err}"
+        );
         let state_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(state_count, 0);
     }
@@ -2043,7 +2050,9 @@ mod tests {
 
         assert!(err.contains("量化目标不存在"), "unexpected error: {err}");
         let state_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(state_count, 0);
     }
@@ -2059,7 +2068,9 @@ mod tests {
 
         assert!(err.contains("未启用日内T策略"), "unexpected error: {err}");
         let state_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM quant_intraday_t_state", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(state_count, 0);
     }
