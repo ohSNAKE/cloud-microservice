@@ -452,5 +452,4 @@ mod tests {
         assert!(calls[0].contains("push2his.eastmoney.com"));
         assert!(calls[0].contains("klt=101"));
     }
-
 }
