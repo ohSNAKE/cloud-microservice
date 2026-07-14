@@ -184,29 +184,12 @@ struct StockKlineData {
     klines: Option<Vec<String>>,
 }
 
-pub async fn fetch_stock_kline(
+fn parse_comma_kline_rows(
     code: &str,
-    period: &str,
-    limit: i64,
+    rows: Vec<String>,
 ) -> Result<Vec<crate::models::KlineBar>, String> {
-    let secid = stock_secid(code);
-    let klt = kline_period_code(period);
-    let url = format!(
-        "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&klt={klt}&fqt=1&lmt={limit}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-    );
-
-    let text = tokio::task::spawn_blocking(move || http_get(&url))
-        .await
-        .map_err(|e| e.to_string())??;
-
-    let body: StockKlineResponse = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    let klines = body
-        .data
-        .and_then(|d| d.klines)
-        .ok_or_else(|| format!("无法获取股票 {code} K线数据"))?;
-
     let mut bars = Vec::new();
-    for line in klines {
+    for line in rows {
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() < 6 {
             continue;
@@ -232,6 +215,51 @@ pub async fn fetch_stock_kline(
         return Err(format!("股票 {code} 暂无K线数据"));
     }
     Ok(bars)
+}
+
+fn parse_eastmoney_stock_klines(
+    code: &str,
+    text: &str,
+) -> Result<Vec<crate::models::KlineBar>, String> {
+    let body: StockKlineResponse = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let klines = body
+        .data
+        .and_then(|d| d.klines)
+        .ok_or_else(|| format!("无法获取股票 {code} K线数据"))?;
+
+    parse_comma_kline_rows(code, klines)
+}
+
+fn fetch_stock_kline_with_getter<F>(
+    code: &str,
+    period: &str,
+    limit: i64,
+    mut get: F,
+) -> Result<Vec<crate::models::KlineBar>, String>
+where
+    F: FnMut(&str) -> Result<String, String>,
+{
+    let secid = stock_secid(code);
+    let klt = kline_period_code(period);
+    let eastmoney_url = format!(
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&klt={klt}&fqt=1&lmt={limit}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+    );
+
+    get(&eastmoney_url).and_then(|text| parse_eastmoney_stock_klines(code, &text))
+}
+
+pub async fn fetch_stock_kline(
+    code: &str,
+    period: &str,
+    limit: i64,
+) -> Result<Vec<crate::models::KlineBar>, String> {
+    let code = code.to_string();
+    let period = period.to_string();
+    tokio::task::spawn_blocking(move || {
+        fetch_stock_kline_with_getter(&code, &period, limit, http_get)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[derive(Debug, Deserialize)]
@@ -380,4 +408,34 @@ mod tests {
         assert!(err.contains("time"));
         assert!(err.contains("status"));
     }
+
+    #[test]
+    fn stock_kline_period_supports_five_minute() {
+        assert_eq!(kline_period_code("5m"), 5);
+        assert_eq!(kline_period_code("5min"), 5);
+    }
+
+    #[test]
+    fn stock_kline_fetcher_uses_eastmoney_for_supported_periods() {
+        for (period, klt) in [("day", 101), ("week", 102), ("month", 103), ("5m", 5)] {
+            let mut calls = Vec::new();
+            let bars = fetch_stock_kline_with_getter("002796", period, 2, |url| {
+                calls.push(url.to_string());
+                assert!(url.contains("push2his.eastmoney.com"));
+                assert!(url.contains(&format!("klt={klt}")));
+                Ok(r#"{
+                        "data": {
+                            "klines": ["2026-07-08,34.18,33.18,34.18,32.25,53506,0,0,0"]
+                        }
+                    }"#
+                .into())
+            })
+            .unwrap();
+
+            assert_eq!(bars.len(), 1);
+            assert_eq!(bars[0].date, "2026-07-08");
+            assert_eq!(calls.len(), 1);
+        }
+    }
+
 }
