@@ -11,10 +11,10 @@ A stock is included only when every fundamental rule and at least one technical 
 - Market: Shanghai and Shenzhen A shares, plus the Beijing Stock Exchange.
 - Ownership: the actual controller is the State Council, SASAC, or a centrally administered state-owned enterprise. Local SOEs are excluded.
 - Total market capitalization: at least CNY 50 billion.
-- Dividend yield: at least 5%. Calculate it as the total cash dividend per share declared in the preceding calendar year divided by the current share price.
-- Bollinger Bands: calculate `BOLL(20, 2)` from closing prices independently for daily and weekly K-lines. A period matches when `current price <= lower band * 1.02`; the daily or weekly period may match.
+- Dividend yield: at least 5%. Calculate it as the sum of all ordinary and interim cash dividends per share whose ex-dividend date falls in the preceding calendar year, divided by the current share price. Include special cash dividends when the source identifies them as a per-share cash distribution. Exclude non-cash distributions, unconfirmed records, and records without an ex-dividend date. Use source-adjusted per-share values where supplied; otherwise exclude a record whose share-capital adjustment cannot be determined.
+- Bollinger Bands: calculate `BOLL(20, 2)` from the 20 most recent completed closing bars independently for daily and weekly K-lines. Use population standard deviation and the provider's completed end-of-week bars. Do not include an in-progress daily or weekly bar. A period matches when `current price <= lower band * 1.02`; the daily or weekly period may match.
 
-Stocks with missing ownership, market capitalization, dividend, price, or fewer than 20 completed bars for a required period are excluded. A zero dividend does not match the dividend rule.
+Stocks with missing ownership, market capitalization, dividend, or price are excluded. A zero dividend does not match the dividend rule. A stock needs 20 completed bars for at least one period: unavailable daily data does not exclude a valid weekly match, and unavailable weekly data does not exclude a valid daily match. The distance for each available period is `(current price - lower band) / lower band`; unavailable periods display as `--`. For the default ordering, use the smaller available distance.
 
 ## Architecture
 
@@ -27,7 +27,11 @@ Extend the existing Eastmoney-backed quote transport with read-only public-data 
 - Cash-dividend records for the preceding calendar year.
 - Realtime stock quotes and daily/weekly K-lines.
 
-The service normalizes the upstream data into an internal candidate snapshot. It filters ownership, market capitalization, and dividend yield before fetching K-lines for the remaining candidates. It calculates daily and weekly BOLL values locally and persists only qualifying results plus the refresh summary.
+The transport normalizes every source response into a `ScreenerUniverseRecord` with a canonical code, exchange (`sh`, `sz`, or `bj`), Eastmoney security identifier, ordinary-equity flag, CNY total market capitalization, controller classification (`central_soe`, `local_soe`, `non_soe`, or `unknown`), and actual-controller text. It admits only ordinary A-share and BSE equity records with CNY values; funds, bonds, indices, B shares, and unclassified securities are excluded. Only `central_soe` records can pass ownership filtering. Dividend records normalize to code, exchange, cash dividend per share, ex-dividend date, distribution kind, and confirmation state.
+
+The service filters ownership, market capitalization, and dividend yield before fetching K-lines for the remaining candidates. It calculates daily and weekly BOLL values locally and persists only qualifying results plus the refresh summary. Source-specific endpoint paths and field aliases are encapsulated within the transport; the normalized contract is the sole input consumed by the screener service.
+
+The Tauri API exposes `get_screener_dashboard()` and `refresh_screener()`. The dashboard returns the latest completed run summary and its result rows. Each row contains identity, fundamental values, current price, daily/weekly lower bands and distances, matching periods, and data timestamps. The refresh command returns the completed dashboard. A process-local single-flight guard prevents overlapping automatic and manual refreshes; a manual request while one is running receives the in-flight result, while the UI disables the action and shows the running state.
 
 The frontend adds a dedicated `选股` route and API methods. It reads persisted results on load and requests a refresh through the new command when the user selects manual refresh.
 
@@ -39,9 +43,11 @@ Add SQLite tables for:
 - The latest screener results, including fundamental values, BOLL values, matching periods, per-field timestamps, and source metadata.
 - A refresh-run summary containing start/end times, status, candidate and match counts, skipped-item counts, and a short failure summary.
 
-The first refresh on a China trading date retrieves and stores the fundamental snapshot. Subsequent refreshes reuse it. During China trading hours (09:30-15:00), the application refreshes eligible candidates every 15 minutes while the screener page is active; manual refresh is always available. Outside trading hours, manual refresh may rebuild the daily fundamental snapshot and K-line values while retaining the last available quote where no newer quote exists.
+Fundamental snapshots have the unique key `(code, exchange, trading_date)`. Screener result rows have the unique key `(code, exchange)` and are replaced atomically with the fully evaluated matches from each completed run. A run with per-stock skips is recorded as `partial` and still replaces the result rows; its summary makes omissions visible. A run that cannot fetch a usable universe or cannot complete its database transaction is `failed`, retains the preceding successful or partial result rows unchanged, and marks that dashboard state stale.
 
-Bound network concurrency across each fetch stage. Failed requests and partial records are not written as valid cached values. A failure for one stock is recorded as a skipped item and does not abort the run.
+The first refresh on a China trading date retrieves and stores the fundamental snapshot. Subsequent refreshes reuse it. Automatic refresh runs only while the screener page is mounted, in the China equity sessions 09:30-11:30 and 13:00-15:00, every 15 minutes. It never starts during the midday break, weekends, or exchange holidays determined by the market-calendar service. Unmounting clears the timer but does not cancel an already-started backend refresh. Manual refresh is always available. Outside trading hours, manual refresh may rebuild the daily fundamental snapshot and K-line values while retaining the last available quote where no newer quote exists.
+
+Bound network concurrency across each fetch stage. Failed requests and partial records are not written as valid cached values. A failure for one stock is recorded as a skipped item and does not abort the run. Migration creates the new tables. Screener snapshots and results are derived cache data, so export omits them and import clears them before the next refresh.
 
 ## UI And Interaction
 
@@ -52,7 +58,7 @@ The page contains:
 - A compact status area with match count, latest successful refresh time, current refresh state, and a manual refresh button.
 - A visible, read-only strategy summary: central SOE, market capitalization at least CNY 50 billion, dividend yield at least 5%, and within 2% of the daily or weekly BOLL lower band.
 - A sortable results table. Default sort is ascending distance to the lower band. Columns include stock name, code, exchange, market capitalization, preceding-year cash dividend per share, dividend yield, current price, daily and weekly lower bands, distance to each lower band, matching period, and data timestamp.
-- Per-row actions to open the existing K-line chart and add the stock to the quant-alert watchlist.
+- Per-row actions to open the existing K-line chart and add the stock to the quant-alert watchlist. This is a one-way integration: it creates an A-share watchlist item using the row's canonical code and name, does not alter the screener result, and treats an existing same-code/same-market item as a successful no-op.
 - Distinct first-use, no-match, stale-result, and refresh-failure states. A cached successful result remains visible after refresh failure with its timestamp and error summary.
 
 ## Error Handling And Data Quality
@@ -78,6 +84,7 @@ Rust service tests cover:
 - Upstream response normalization.
 - Daily fundamental-cache hits, trading-date invalidation, and failed-request non-caching.
 - Bounded concurrency and partial-refresh completion.
+- Atomic result replacement after partial and failed runs, scheduler lifecycle, single-flight refresh behavior, database migration, and import cache clearing.
 
 Frontend tests cover:
 
