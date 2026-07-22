@@ -388,6 +388,75 @@ export interface QuantSignalFilter {
   limit?: number;
 }
 
+export type ScreenerExchange = "sh" | "sz" | "bj";
+export type ScreenerPeriod = "day" | "week";
+export type ScreenerRunStatus = "success" | "partial" | "failed";
+export type ScreenerFailureCode =
+  | "universe_unavailable"
+  | "provider_unavailable"
+  | "partial_data"
+  | "import_invalidated";
+
+export interface ScreenerFailureSummary {
+  code: ScreenerFailureCode | string;
+  message: string;
+  skipped_count: number;
+}
+
+export interface ScreenerRun {
+  id: number;
+  status: ScreenerRunStatus | string;
+  started_at: string;
+  completed_at: string;
+  candidate_count: number;
+  match_count: number;
+  skipped_count: number;
+  failure_summary: ScreenerFailureSummary | null;
+}
+
+export interface ScreenerFailedAttempt {
+  started_at: string;
+  completed_at: string;
+  failure_summary: ScreenerFailureSummary | null;
+}
+
+export interface ScreenerResult {
+  code: string;
+  exchange: ScreenerExchange;
+  name: string;
+  market_cap_cny: number;
+  cash_dividend_per_share: number;
+  dividend_yield: number;
+  current_price: number;
+  price_observed_at: string;
+  daily_lower_band: number | null;
+  daily_distance: number | null;
+  daily_kline_completed_at: string | null;
+  weekly_lower_band: number | null;
+  weekly_distance: number | null;
+  weekly_kline_completed_at: string | null;
+  matched_periods: ScreenerPeriod[];
+  source_metadata: string;
+  fundamental_observed_at: string;
+}
+
+export interface ScreenerDashboard {
+  displayed_run: ScreenerRun | null;
+  latest_failed_attempt: ScreenerFailedAttempt | null;
+  is_stale: boolean;
+  results: ScreenerResult[];
+}
+
+export interface ScreenerRefreshSchedule {
+  should_refresh_now: boolean;
+  next_refresh_at: string;
+}
+
+export interface ScreenerWatchlistAddResult {
+  added: boolean;
+  already_present: boolean;
+}
+
 export const ACCOUNT_TYPES = [
   { label: "现金", value: "cash", icon: "cash" },
   { label: "银行卡", value: "bank", icon: "bank" },

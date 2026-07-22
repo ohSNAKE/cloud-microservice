@@ -29,6 +29,10 @@ import type {
   QuantTarget,
   QuantWatchlistItem,
   QuantWatchlistItemUpdate,
+  ScreenerDashboard,
+  ScreenerExchange,
+  ScreenerRefreshSchedule,
+  ScreenerWatchlistAddResult,
   Settings,
   AppLockStatus,
   Transaction,
@@ -115,6 +119,17 @@ export const api = {
     invoke<void>("clear_intraday_t_sold", { code, market }),
   listQuantSignals: (filter?: QuantSignalFilter) =>
     invoke<QuantSignal[]>("list_quant_signals", { filter }),
+
+  getScreenerDashboard: () => invoke<ScreenerDashboard>("get_screener_dashboard"),
+  refreshScreener: () => invoke<ScreenerDashboard>("refresh_screener"),
+  getScreenerRefreshSchedule: () =>
+    invoke<ScreenerRefreshSchedule>("get_screener_refresh_schedule"),
+  addScreenerResultToWatchlist: (code: string, exchange: ScreenerExchange, name: string) =>
+    invoke<ScreenerWatchlistAddResult>("add_screener_result_to_watchlist", {
+      code,
+      exchange,
+      name,
+    }),
 
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),
