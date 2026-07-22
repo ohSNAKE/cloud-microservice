@@ -316,6 +316,87 @@ fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )
     .ok();
 
+    ensure_screener_schema(conn)?;
+
+    Ok(())
+}
+
+pub fn ensure_screener_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS screener_fundamentals (
+          code TEXT NOT NULL, exchange TEXT NOT NULL, valuation_date TEXT NOT NULL,
+          dividend_year INTEGER NOT NULL, name TEXT NOT NULL, market_cap_cny REAL NOT NULL,
+          actual_controller TEXT NOT NULL, controller_classification TEXT NOT NULL,
+          cash_dividend_per_share REAL NOT NULL, source_metadata TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          PRIMARY KEY (code, exchange, valuation_date, dividend_year)
+        );
+        CREATE TABLE IF NOT EXISTS screener_controller_registry (
+          valuation_date TEXT NOT NULL, legal_name TEXT NOT NULL, normalized_name TEXT NOT NULL,
+          aliases_json TEXT NOT NULL, source_url TEXT NOT NULL, source_date TEXT NOT NULL,
+          PRIMARY KEY (valuation_date, normalized_name)
+        );
+        CREATE TABLE IF NOT EXISTS screener_quotes (
+          code TEXT NOT NULL, exchange TEXT NOT NULL, valuation_date TEXT NOT NULL,
+          price REAL NOT NULL, observed_at TEXT NOT NULL,
+          PRIMARY KEY (code, exchange, valuation_date)
+        );
+        CREATE TABLE IF NOT EXISTS screener_runs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT NOT NULL, started_at TEXT NOT NULL,
+          completed_at TEXT NOT NULL, candidate_count INTEGER NOT NULL, match_count INTEGER NOT NULL,
+          skipped_count INTEGER NOT NULL, failure_code TEXT, failure_message TEXT
+        );
+        CREATE TABLE IF NOT EXISTS screener_results (
+          run_id INTEGER NOT NULL, code TEXT NOT NULL, exchange TEXT NOT NULL, name TEXT NOT NULL,
+          market_cap_cny REAL NOT NULL, cash_dividend_per_share REAL NOT NULL, dividend_yield REAL NOT NULL,
+          current_price REAL NOT NULL, price_observed_at TEXT NOT NULL,
+          daily_lower_band REAL, daily_distance REAL, daily_kline_completed_at TEXT,
+          weekly_lower_band REAL, weekly_distance REAL, weekly_kline_completed_at TEXT,
+          matched_periods_json TEXT NOT NULL, source_metadata TEXT NOT NULL, fundamental_observed_at TEXT NOT NULL,
+          PRIMARY KEY (run_id, code, exchange), FOREIGN KEY (run_id) REFERENCES screener_runs(id)
+        );
+        CREATE TABLE IF NOT EXISTS screener_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_screener_results_run ON screener_results(run_id);
+        ",
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO screener_state (key, value) VALUES ('generation', '0')",
+        [],
+    )?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn prune_derived_screener_data(conn: &Connection) -> Result<(), rusqlite::Error> {
+    for table in [
+        "screener_fundamentals",
+        "screener_controller_registry",
+        "screener_quotes",
+    ] {
+        conn.execute(
+            &format!(
+                "DELETE FROM {table}
+                 WHERE valuation_date NOT IN (
+                   SELECT valuation_date FROM (
+                     SELECT DISTINCT valuation_date FROM {table} ORDER BY valuation_date DESC LIMIT 7
+                   )
+                 )"
+            ),
+            [],
+        )?;
+    }
+
+    conn.execute(
+        "DELETE FROM screener_results
+         WHERE run_id NOT IN (SELECT id FROM screener_runs ORDER BY id DESC LIMIT 30)",
+        [],
+    )?;
+    conn.execute(
+        "DELETE FROM screener_runs
+         WHERE id NOT IN (SELECT id FROM screener_runs ORDER BY id DESC LIMIT 30)",
+        [],
+    )?;
     Ok(())
 }
 
@@ -430,4 +511,123 @@ pub fn today() -> String {
 
 pub fn current_month() -> String {
     Local::now().format("%Y-%m").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn test_connection_after_migration() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                transaction_date TEXT NOT NULL
+            );
+            CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            ",
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        conn
+    }
+
+    fn table_exists(conn: &Connection, table: &str) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap()
+            == 1
+    }
+
+    fn index_exists(conn: &Connection, index: &str) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+            [index],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap()
+            == 1
+    }
+
+    #[test]
+    fn migration_creates_screener_cache_and_result_tables() {
+        let conn = test_connection_after_migration();
+        for table in [
+            "screener_fundamentals",
+            "screener_controller_registry",
+            "screener_quotes",
+            "screener_runs",
+            "screener_results",
+            "screener_state",
+        ] {
+            assert!(table_exists(&conn, table), "missing table {table}");
+        }
+        assert!(index_exists(&conn, "idx_screener_results_run"));
+    }
+
+    #[test]
+    fn result_rows_require_a_run() {
+        let conn = test_connection_after_migration();
+        let error = conn
+            .execute(
+                "INSERT INTO screener_results
+                 (run_id, code, exchange, name, market_cap_cny, cash_dividend_per_share,
+                  dividend_yield, current_price, price_observed_at, matched_periods_json,
+                  source_metadata, fundamental_observed_at)
+                 VALUES (999, '600001', 'sh', '测试', 50000000000, 1.0, 0.05, 10.0,
+                         '2026-07-21T01:00:00Z', '[\"day\"]', '{}', '2026-07-21T01:00:00Z')",
+                [],
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("FOREIGN KEY"));
+    }
+
+    #[test]
+    fn prune_derived_screener_data_retains_recent_dates_and_runs() {
+        let conn = test_connection_after_migration();
+        for day in 1..=8 {
+            conn.execute(
+                "INSERT INTO screener_fundamentals
+                 (code, exchange, valuation_date, dividend_year, name, market_cap_cny,
+                  actual_controller, controller_classification, cash_dividend_per_share,
+                  source_metadata, observed_at)
+                 VALUES ('600001', 'sh', ?1, 2025, '测试', 50000000000, '国务院',
+                         'central_soe', 1.0, '{}', '2026-07-21T01:00:00Z')",
+                [format!("2026-07-{day:02}")],
+            )
+            .unwrap();
+        }
+        for run in 1..=31 {
+            conn.execute(
+                "INSERT INTO screener_runs
+                 (status, started_at, completed_at, candidate_count, match_count, skipped_count)
+                 VALUES ('success', ?1, ?1, 0, 0, 0)",
+                [format!("2026-07-21T00:{run:02}:00Z")],
+            )
+            .unwrap();
+        }
+
+        prune_derived_screener_data(&conn).unwrap();
+
+        let fundamental_dates: i64 = conn
+            .query_row(
+                "SELECT COUNT(DISTINCT valuation_date) FROM screener_fundamentals",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let runs: i64 = conn
+            .query_row("SELECT COUNT(*) FROM screener_runs", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(fundamental_dates, 7);
+        assert_eq!(runs, 30);
+    }
 }

@@ -1,4 +1,4 @@
-use crate::db::{db_path_hint, now_local};
+use crate::db::{db_path_hint, ensure_screener_schema, now_local};
 use crate::models::{
     Account, Category, ExportPayload, HoldingRow, QuantIntradayTStateRow, QuantSignalRow,
     QuantStrategySettingsRow, QuantWatchlistRow, TransactionRow,
@@ -244,9 +244,18 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
         }
     }
 
+    ensure_screener_schema(conn).map_err(|e| e.to_string())?;
+
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     tx.execute_batch(
-        "DELETE FROM quant_intraday_t_state;
+        "DELETE FROM screener_results;
+         DELETE FROM screener_runs;
+         DELETE FROM screener_fundamentals;
+         DELETE FROM screener_controller_registry;
+         DELETE FROM screener_quotes;
+         INSERT OR IGNORE INTO screener_state (key, value) VALUES ('generation', '0');
+         UPDATE screener_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'generation';
+         DELETE FROM quant_intraday_t_state;
          DELETE FROM quant_signals;
          DELETE FROM quant_strategy_settings;
          DELETE FROM quant_watchlist;
@@ -572,6 +581,60 @@ mod tests {
         .unwrap()
     }
 
+    fn empty_export_payload() -> ExportPayload {
+        ExportPayload {
+            version: "1.0".into(),
+            exported_at: "2026-07-21 00:00:00".into(),
+            accounts: Vec::new(),
+            categories: Vec::new(),
+            transactions: Vec::new(),
+            holdings: Vec::new(),
+            settings: Vec::new(),
+            quant_watchlist: Vec::new(),
+            quant_strategy_settings: Vec::new(),
+            quant_signals: Vec::new(),
+            quant_intraday_t_state: Vec::new(),
+        }
+    }
+
+    fn setup_screener_rows(conn: &Connection) {
+        conn.execute_batch(
+            "
+            CREATE TABLE screener_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO screener_state (key, value) VALUES ('generation', '0');
+            CREATE TABLE screener_runs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT NOT NULL, started_at TEXT NOT NULL,
+              completed_at TEXT NOT NULL, candidate_count INTEGER NOT NULL, match_count INTEGER NOT NULL,
+              skipped_count INTEGER NOT NULL, failure_code TEXT, failure_message TEXT
+            );
+            CREATE TABLE screener_results (
+              run_id INTEGER NOT NULL, code TEXT NOT NULL, exchange TEXT NOT NULL, name TEXT NOT NULL,
+              market_cap_cny REAL NOT NULL, cash_dividend_per_share REAL NOT NULL, dividend_yield REAL NOT NULL,
+              current_price REAL NOT NULL, price_observed_at TEXT NOT NULL, matched_periods_json TEXT NOT NULL,
+              source_metadata TEXT NOT NULL, fundamental_observed_at TEXT NOT NULL,
+              PRIMARY KEY (run_id, code, exchange), FOREIGN KEY (run_id) REFERENCES screener_runs(id)
+            );
+            CREATE TABLE screener_fundamentals (code TEXT, exchange TEXT, valuation_date TEXT, dividend_year INTEGER, name TEXT,
+              market_cap_cny REAL, actual_controller TEXT, controller_classification TEXT, cash_dividend_per_share REAL,
+              source_metadata TEXT, observed_at TEXT);
+            CREATE TABLE screener_controller_registry (valuation_date TEXT, legal_name TEXT, normalized_name TEXT,
+              aliases_json TEXT, source_url TEXT, source_date TEXT);
+            CREATE TABLE screener_quotes (code TEXT, exchange TEXT, valuation_date TEXT, price REAL, observed_at TEXT);
+            INSERT INTO screener_runs (id, status, started_at, completed_at, candidate_count, match_count, skipped_count)
+              VALUES (1, 'success', '2026-07-21T01:00:00Z', '2026-07-21T01:00:00Z', 1, 1, 0);
+            INSERT INTO screener_results
+              (run_id, code, exchange, name, market_cap_cny, cash_dividend_per_share, dividend_yield,
+               current_price, price_observed_at, matched_periods_json, source_metadata, fundamental_observed_at)
+              VALUES (1, '600001', 'sh', '测试', 50000000000, 1.0, 0.05, 10.0,
+                      '2026-07-21T01:00:00Z', '[\"day\"]', '{}', '2026-07-21T01:00:00Z');
+            INSERT INTO screener_fundamentals VALUES ('600001', 'sh', '2026-07-21', 2025, '测试', 50000000000, '国务院', 'central_soe', 1.0, '{}', '2026-07-21T01:00:00Z');
+            INSERT INTO screener_controller_registry VALUES ('2026-07-21', '国务院', '国务院', '[]', 'https://www.sasac.gov.cn', '2026-07-21');
+            INSERT INTO screener_quotes VALUES ('600001', 'sh', '2026-07-21', 10.0, '2026-07-21T01:00:00Z');
+            ",
+        )
+        .unwrap();
+    }
+
     #[test]
     fn export_payload_accepts_missing_quant_fields() {
         let payload: ExportPayload = serde_json::from_str(old_backup_json()).unwrap();
@@ -580,6 +643,29 @@ mod tests {
         assert!(payload.quant_strategy_settings.is_empty());
         assert!(payload.quant_signals.is_empty());
         assert!(payload.quant_intraday_t_state.is_empty());
+    }
+
+    #[test]
+    fn import_clears_derived_screener_rows_and_increments_generation() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_schema(&conn);
+        setup_screener_rows(&conn);
+
+        import_payload_to_conn(&conn, empty_export_payload()).unwrap();
+
+        assert_eq!(table_count(&conn, "screener_fundamentals"), 0);
+        assert_eq!(table_count(&conn, "screener_controller_registry"), 0);
+        assert_eq!(table_count(&conn, "screener_quotes"), 0);
+        assert_eq!(table_count(&conn, "screener_results"), 0);
+        assert_eq!(table_count(&conn, "screener_runs"), 0);
+        let generation: String = conn
+            .query_row(
+                "SELECT value FROM screener_state WHERE key = 'generation'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(generation, "1");
     }
 
     #[test]
