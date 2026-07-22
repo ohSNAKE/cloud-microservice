@@ -5,6 +5,7 @@ import {
   BarChartOutlined,
   BankOutlined,
   DashboardOutlined,
+  FilterOutlined,
   LineChartOutlined,
   SettingOutlined,
   StockOutlined,
@@ -18,6 +19,7 @@ import AssetsPage from "./pages/Assets";
 import TransactionsPage from "./pages/Transactions";
 import HoldingsPage from "./pages/Holdings";
 import QuantAlertsPage from "./pages/QuantAlerts";
+import ScreenerPage from "./pages/Screener";
 import ReportsPage from "./pages/Reports";
 import SettingsPage from "./pages/Settings";
 import QuickAddModal from "./components/QuickAddModal";
@@ -32,6 +34,7 @@ const menuItems = [
   { key: "/transactions", icon: <WalletOutlined />, label: "记账" },
   { key: "/holdings", icon: <LineChartOutlined />, label: "投资持仓" },
   { key: "/quant", icon: <StockOutlined />, label: "量化提醒" },
+  { key: "/screener", icon: <FilterOutlined />, label: "选股" },
   { key: "/reports", icon: <BarChartOutlined />, label: "报表分析" },
   { key: "/settings", icon: <SettingOutlined />, label: "设置" },
 ];
@@ -42,6 +45,7 @@ const routeMeta: Record<string, { title: string; subtitle: string }> = {
   "/transactions": { title: "记账", subtitle: "追踪每一笔收入与支出" },
   "/holdings": { title: "投资持仓", subtitle: "股票基金市值与盈亏" },
   "/quant": { title: "量化提醒", subtitle: "盘中趋势信号与买卖关注提醒" },
+  "/screener": { title: "选股", subtitle: "央企高股息与 BOLL 下轨筛选" },
   "/reports": { title: "报表分析", subtitle: "分类统计、预算与趋势" },
   "/settings": { title: "设置", subtitle: "AI 记账、行情与数据备份" },
 };
@@ -129,6 +133,7 @@ function AppLayout() {
                 <Route path="/transactions" element={<TransactionsPage />} />
                 <Route path="/holdings" element={<HoldingsPage />} />
                 <Route path="/quant" element={<QuantAlertsPage />} />
+                <Route path="/screener" element={<ScreenerPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
