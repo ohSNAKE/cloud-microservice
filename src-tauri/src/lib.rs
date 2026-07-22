@@ -113,6 +113,10 @@ pub fn run() {
             commands::get_db_path,
             commands::export_data,
             commands::import_data,
+            commands::get_screener_dashboard,
+            commands::refresh_screener,
+            commands::get_screener_refresh_schedule,
+            commands::add_screener_result_to_watchlist,
             commands::parse_transaction_nl_command,
         ])
         .run(tauri::generate_context!())
