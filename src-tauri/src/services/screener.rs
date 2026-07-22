@@ -1,7 +1,275 @@
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveTime};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use unicode_normalization::UnicodeNormalization;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenerPeriod {
+    Day,
+    Week,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DividendAdjustment {
+    Adjusted,
+    VerifiedUnadjusted,
+    Unverifiable,
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalizedDividend {
+    pub code: String,
+    pub exchange: String,
+    pub ex_dividend_date: NaiveDate,
+    pub source_cash_per_ten_shares: Option<f64>,
+    pub ex_date_total_capital: Option<f64>,
+    pub valuation_date_total_capital: Option<f64>,
+    pub gross_per_current_share: f64,
+    pub adjustment: DividendAdjustment,
+    pub confirmed_cash: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct CentralControllerEntry {
+    pub original_name: String,
+    pub normalized_name: String,
+    pub aliases: Vec<String>,
+}
+
+impl CentralControllerEntry {
+    pub fn new(original_name: &str, aliases: Vec<String>) -> Self {
+        Self {
+            original_name: original_name.to_string(),
+            normalized_name: normalize_controller_name(original_name),
+            aliases: aliases
+                .into_iter()
+                .map(|alias| normalize_controller_name(&alias))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CentralControllerRegistry {
+    pub valuation_date: NaiveDate,
+    pub entries: HashSet<String>,
+}
+
+impl CentralControllerRegistry {
+    pub fn from_entries(entries: Vec<CentralControllerEntry>) -> Self {
+        let mut normalized_entries = HashSet::new();
+        for entry in entries {
+            normalized_entries.insert(entry.normalized_name);
+            normalized_entries.extend(entry.aliases);
+        }
+
+        Self {
+            valuation_date: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
+            entries: normalized_entries,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BollMatch {
+    pub periods: Vec<ScreenerPeriod>,
+    pub daily_lower_band: Option<f64>,
+    pub weekly_lower_band: Option<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalizedKline {
+    pub code: String,
+    pub exchange: String,
+    pub period: ScreenerPeriod,
+    pub trading_date: NaiveDate,
+    pub completed_at: String,
+    pub close: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScreenerCandidateMatch {
+    pub code: String,
+    pub exchange: String,
+    pub name: String,
+    pub distance: f64,
+}
+
+pub fn normalize_controller_name(value: &str) -> String {
+    let normalized: String = value.nfkc().collect();
+    let trimmed = normalized.trim();
+    ["（集团）有限公司", "集团有限公司", "有限公司", "集团"]
+        .iter()
+        .find_map(|suffix| trimmed.strip_suffix(suffix))
+        .unwrap_or(trimmed)
+        .trim()
+        .to_string()
+}
+
+pub fn is_central_soe(value: &str, registry: &CentralControllerRegistry) -> bool {
+    let normalized = normalize_controller_name(value);
+    normalized == "国务院" || normalized == "国务院国有资产监督管理委员会" || registry.entries.contains(&normalized)
+}
+
+pub fn trailing_cash_dividend(records: &[NormalizedDividend], year: i32) -> Option<f64> {
+    let matching = records
+        .iter()
+        .filter(|record| record.ex_dividend_date.year() == year)
+        .collect::<Vec<_>>();
+    if matching
+        .iter()
+        .any(|record| record.confirmed_cash && record.adjustment == DividendAdjustment::Unverifiable)
+    {
+        return None;
+    }
+
+    let total = matching
+        .into_iter()
+        .filter(|record| record.confirmed_cash && record.adjustment != DividendAdjustment::Unverifiable)
+        .map(|record| record.gross_per_current_share)
+        .sum::<f64>();
+    (total.is_finite() && total > 0.0).then_some(total)
+}
+
+pub fn dividend_yield(records: &[NormalizedDividend], year: i32, price: f64) -> Option<f64> {
+    if !price.is_finite() || price <= 0.0 {
+        return None;
+    }
+    trailing_cash_dividend(records, year).map(|dividend| dividend / price)
+}
+
+pub fn passes_fundamentals(market_cap_cny: f64, dividend_yield: f64) -> bool {
+    market_cap_cny.is_finite()
+        && dividend_yield.is_finite()
+        && market_cap_cny >= 50_000_000_000.0
+        && dividend_yield >= 0.05
+}
+
+pub fn completed_screener_bars(
+    bars: &[NormalizedKline],
+    now: DateTime<FixedOffset>,
+    period: ScreenerPeriod,
+) -> Vec<NormalizedKline> {
+    let china_now = now.with_timezone(&FixedOffset::east_opt(8 * 3600).unwrap());
+    let valuation_date = china_now.date_naive();
+    let cutoff = NaiveTime::from_hms_opt(15, 0, 0).unwrap();
+
+    bars.iter()
+        .filter(|bar| bar.period == period && bar.trading_date <= valuation_date)
+        .filter(|bar| match period {
+            ScreenerPeriod::Day => {
+                bar.trading_date < valuation_date || china_now.time() >= cutoff
+            }
+            ScreenerPeriod::Week => completed_at(bar)
+                .map(|completed_at| completed_at <= china_now)
+                .unwrap_or(false),
+        })
+        .cloned()
+        .collect()
+}
+
+pub fn validate_completed_bars(
+    bars: &[NormalizedKline],
+    period: ScreenerPeriod,
+) -> Result<(), String> {
+    let mut seen_dates = HashSet::new();
+    let mut previous_completed_at: Option<DateTime<FixedOffset>> = None;
+
+    for bar in bars {
+        if bar.period != period {
+            return Err("bar period mismatch".into());
+        }
+        if !bar.close.is_finite() || bar.close <= 0.0 {
+            return Err("bar close must be positive and finite".into());
+        }
+        if !seen_dates.insert(bar.trading_date) {
+            return Err("duplicate bar trading date".into());
+        }
+        let completed_at = completed_at(bar)?;
+        if previous_completed_at
+            .map(|previous| completed_at <= previous)
+            .unwrap_or(false)
+        {
+            return Err("bars must be strictly ascending".into());
+        }
+        previous_completed_at = Some(completed_at);
+    }
+
+    Ok(())
+}
+
+pub fn lower_boll_band(
+    bars: &[NormalizedKline],
+    now: DateTime<FixedOffset>,
+    period: ScreenerPeriod,
+) -> Option<f64> {
+    let china_now = now.with_timezone(&FixedOffset::east_opt(8 * 3600).unwrap());
+    let completed = completed_screener_bars(bars, china_now, period);
+    validate_completed_bars(&completed, period).ok()?;
+    let closes = completed
+        .iter()
+        .rev()
+        .take(20)
+        .map(|bar| bar.close)
+        .collect::<Vec<_>>();
+    if closes.len() != 20 {
+        return None;
+    }
+
+    let mean = closes.iter().sum::<f64>() / 20.0;
+    let deviation = (closes.iter().map(|close| (close - mean).powi(2)).sum::<f64>() / 20.0).sqrt();
+    let lower = mean - 2.0 * deviation;
+    (lower.is_finite() && lower > 0.0).then_some(lower)
+}
+
+pub fn evaluate_boll_match(
+    current_price: f64,
+    daily_lower_band: Option<f64>,
+    weekly_lower_band: Option<f64>,
+) -> BollMatch {
+    let mut periods = Vec::new();
+    if period_matches(current_price, daily_lower_band) {
+        periods.push(ScreenerPeriod::Day);
+    }
+    if period_matches(current_price, weekly_lower_band) {
+        periods.push(ScreenerPeriod::Week);
+    }
+
+    BollMatch {
+        periods,
+        daily_lower_band,
+        weekly_lower_band,
+    }
+}
+
+pub fn sort_matches(mut matches: Vec<ScreenerCandidateMatch>) -> Vec<ScreenerCandidateMatch> {
+    matches.sort_by(|left, right| {
+        left.distance
+            .total_cmp(&right.distance)
+            .then_with(|| left.code.cmp(&right.code))
+            .then_with(|| left.exchange.cmp(&right.exchange))
+    });
+    matches
+}
+
+fn period_matches(current_price: f64, lower_band: Option<f64>) -> bool {
+    current_price.is_finite()
+        && current_price > 0.0
+        && lower_band
+            .filter(|lower| lower.is_finite() && *lower > 0.0)
+            .map(|lower| current_price <= lower * 1.02)
+            .unwrap_or(false)
+}
+
+fn completed_at(bar: &NormalizedKline) -> Result<DateTime<FixedOffset>, String> {
+    DateTime::parse_from_rfc3339(&bar.completed_at).map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
+    use chrono::{DateTime, Duration, FixedOffset, NaiveDate, TimeZone};
 
     fn naive_date(date: &str) -> NaiveDate {
         NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap()
@@ -91,9 +359,12 @@ mod tests {
     }
 
     fn weekly_bars_including(date: &str, close: f64) -> Vec<NormalizedKline> {
-        let mut bars = (0..19)
+        let included_date = naive_date(date);
+        let first_week = included_date - Duration::days(20 * 7);
+        let mut bars = (0..20)
             .map(|index| {
-                let mut item = bar(&format!("2026-{:02}-03", index % 6 + 1), 10.0);
+                let date = first_week + Duration::days(index as i64 * 7);
+                let mut item = bar(&date.format("%Y-%m-%d").to_string(), 10.0);
                 item.period = ScreenerPeriod::Week;
                 item.completed_at = format!("{}T15:00:00+08:00", item.trading_date);
                 item
