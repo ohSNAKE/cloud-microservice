@@ -467,6 +467,73 @@ pub struct QuantIntradayTStateRow {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerFailureSummary {
+    pub code: String,
+    pub message: String,
+    pub skipped_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerRun {
+    pub id: i64,
+    pub status: String,
+    pub started_at: String,
+    pub completed_at: String,
+    pub candidate_count: i64,
+    pub match_count: i64,
+    pub skipped_count: i64,
+    pub failure_summary: Option<ScreenerFailureSummary>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerFailedAttempt {
+    pub started_at: String,
+    pub completed_at: String,
+    pub failure_summary: Option<ScreenerFailureSummary>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerResult {
+    pub code: String,
+    pub exchange: String,
+    pub name: String,
+    pub market_cap_cny: f64,
+    pub cash_dividend_per_share: f64,
+    pub dividend_yield: f64,
+    pub current_price: f64,
+    pub price_observed_at: String,
+    pub daily_lower_band: Option<f64>,
+    pub daily_distance: Option<f64>,
+    pub daily_kline_completed_at: Option<String>,
+    pub weekly_lower_band: Option<f64>,
+    pub weekly_distance: Option<f64>,
+    pub weekly_kline_completed_at: Option<String>,
+    pub matched_periods: Vec<String>,
+    pub source_metadata: String,
+    pub fundamental_observed_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerDashboard {
+    pub displayed_run: Option<ScreenerRun>,
+    pub latest_failed_attempt: Option<ScreenerFailedAttempt>,
+    pub is_stale: bool,
+    pub results: Vec<ScreenerResult>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerRefreshSchedule {
+    pub should_refresh_now: bool,
+    pub next_refresh_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScreenerWatchlistAddResult {
+    pub added: bool,
+    pub already_present: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportPayload {
     pub version: String,
     pub exported_at: String,

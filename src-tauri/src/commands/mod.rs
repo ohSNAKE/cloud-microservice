@@ -8,6 +8,7 @@ pub mod holdings;
 pub mod quant;
 pub mod recurring;
 pub mod reports;
+pub mod screener_repository;
 pub mod settings;
 pub mod transactions;
 
@@ -21,5 +22,6 @@ pub use holdings::*;
 pub use quant::*;
 pub use recurring::*;
 pub use reports::*;
+pub use screener_repository::*;
 pub use settings::*;
 pub use transactions::*;
