@@ -109,7 +109,9 @@ pub fn normalize_controller_name(value: &str) -> String {
 
 pub fn is_central_soe(value: &str, registry: &CentralControllerRegistry) -> bool {
     let normalized = normalize_controller_name(value);
-    normalized == "国务院" || normalized == "国务院国有资产监督管理委员会" || registry.entries.contains(&normalized)
+    normalized == "国务院"
+        || normalized == "国务院国有资产监督管理委员会"
+        || registry.entries.contains(&normalized)
 }
 
 pub fn trailing_cash_dividend(records: &[NormalizedDividend], year: i32) -> Option<f64> {
@@ -117,16 +119,17 @@ pub fn trailing_cash_dividend(records: &[NormalizedDividend], year: i32) -> Opti
         .iter()
         .filter(|record| record.ex_dividend_date.year() == year)
         .collect::<Vec<_>>();
-    if matching
-        .iter()
-        .any(|record| record.confirmed_cash && record.adjustment == DividendAdjustment::Unverifiable)
-    {
+    if matching.iter().any(|record| {
+        record.confirmed_cash && record.adjustment == DividendAdjustment::Unverifiable
+    }) {
         return None;
     }
 
     let total = matching
         .into_iter()
-        .filter(|record| record.confirmed_cash && record.adjustment != DividendAdjustment::Unverifiable)
+        .filter(|record| {
+            record.confirmed_cash && record.adjustment != DividendAdjustment::Unverifiable
+        })
         .map(|record| record.gross_per_current_share)
         .sum::<f64>();
     (total.is_finite() && total > 0.0).then_some(total)
@@ -158,9 +161,7 @@ pub fn completed_screener_bars(
     bars.iter()
         .filter(|bar| bar.period == period && bar.trading_date <= valuation_date)
         .filter(|bar| match period {
-            ScreenerPeriod::Day => {
-                bar.trading_date < valuation_date || china_now.time() >= cutoff
-            }
+            ScreenerPeriod::Day => bar.trading_date < valuation_date || china_now.time() >= cutoff,
             ScreenerPeriod::Week => completed_at(bar)
                 .map(|completed_at| completed_at <= china_now)
                 .unwrap_or(false),
@@ -218,7 +219,12 @@ pub fn lower_boll_band(
     }
 
     let mean = closes.iter().sum::<f64>() / 20.0;
-    let deviation = (closes.iter().map(|close| (close - mean).powi(2)).sum::<f64>() / 20.0).sqrt();
+    let deviation = (closes
+        .iter()
+        .map(|close| (close - mean).powi(2))
+        .sum::<f64>()
+        / 20.0)
+        .sqrt();
     let lower = mean - 2.0 * deviation;
     (lower.is_finite() && lower > 0.0).then_some(lower)
 }
@@ -290,11 +296,7 @@ mod tests {
             .unwrap()
     }
 
-    fn dividend(
-        date: &str,
-        amount: f64,
-        adjustment: DividendAdjustment,
-    ) -> NormalizedDividend {
+    fn dividend(date: &str, amount: f64, adjustment: DividendAdjustment) -> NormalizedDividend {
         NormalizedDividend {
             code: "600001".into(),
             exchange: "sh".into(),
@@ -396,7 +398,10 @@ mod tests {
         assert!(is_central_soe("中国移动通信集团", &registry));
         assert!(is_central_soe("国务院国有资产监督管理委员会", &registry));
         assert!(is_central_soe("国务院", &registry));
-        assert!(!is_central_soe("某地方国资委控股的中国移动通信集团", &registry));
+        assert!(!is_central_soe(
+            "某地方国资委控股的中国移动通信集团",
+            &registry
+        ));
     }
 
     #[test]
@@ -446,13 +451,15 @@ mod tests {
     #[test]
     fn daily_bar_is_included_at_exactly_1500() {
         let bars = daily_bars_including("2026-07-21", 8.0);
-        assert!(lower_boll_band(
-            &bars,
-            china_datetime(2026, 7, 21, 15, 0, 0),
-            ScreenerPeriod::Day
-        )
-        .unwrap()
-            < 10.0);
+        assert!(
+            lower_boll_band(
+                &bars,
+                china_datetime(2026, 7, 21, 15, 0, 0),
+                ScreenerPeriod::Day
+            )
+            .unwrap()
+                < 10.0
+        );
     }
 
     #[test]
@@ -499,7 +506,11 @@ mod tests {
     fn week_is_completed_only_after_friday_close() {
         let bars = weekly_bars_including("2026-07-24", 8.0);
         assert_eq!(
-            lower_boll_band(&bars, china_datetime(2026, 7, 24, 14, 59, 59), ScreenerPeriod::Week),
+            lower_boll_band(
+                &bars,
+                china_datetime(2026, 7, 24, 14, 59, 59),
+                ScreenerPeriod::Week
+            ),
             Some(10.0)
         );
     }
@@ -507,13 +518,15 @@ mod tests {
     #[test]
     fn friday_bar_is_included_at_close_and_future_weekly_bars_are_excluded() {
         let bars = weekly_bars_including("2026-07-24", 8.0);
-        assert!(lower_boll_band(
-            &bars,
-            china_datetime(2026, 7, 24, 15, 0, 0),
-            ScreenerPeriod::Week
-        )
-        .unwrap()
-            < 10.0);
+        assert!(
+            lower_boll_band(
+                &bars,
+                china_datetime(2026, 7, 24, 15, 0, 0),
+                ScreenerPeriod::Week
+            )
+            .unwrap()
+                < 10.0
+        );
         assert_eq!(
             completed_screener_bars(
                 &weekly_bars_including("2026-07-31", 7.0),

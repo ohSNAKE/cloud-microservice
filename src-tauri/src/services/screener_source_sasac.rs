@@ -4,8 +4,10 @@ use scraper::{Html, Selector};
 use serde::Deserialize;
 use std::collections::HashSet;
 
-pub const SASAC_DIRECTORY_URL: &str = "https://www.sasac.gov.cn/n2588035/n2641579/n2641645/index.html";
-pub const EMBEDDED_ALIAS_REGISTRY: &str = include_str!("../../resources/sasac_controller_aliases.json");
+pub const SASAC_DIRECTORY_URL: &str =
+    "https://www.sasac.gov.cn/n2588035/n2641579/n2641645/index.html";
+pub const EMBEDDED_ALIAS_REGISTRY: &str =
+    include_str!("../../resources/sasac_controller_aliases.json");
 
 #[derive(Debug, Clone)]
 pub struct SasacDirectorySnapshot {
@@ -70,7 +72,8 @@ pub fn parse_sasac_directory(
 }
 
 pub fn parse_alias_registry(json: &str) -> Result<Vec<SasacAliasEntry>, String> {
-    let raw_entries = serde_json::from_str::<Vec<RawAliasEntry>>(json).map_err(|error| error.to_string())?;
+    let raw_entries =
+        serde_json::from_str::<Vec<RawAliasEntry>>(json).map_err(|error| error.to_string())?;
     raw_entries
         .into_iter()
         .map(|entry| {

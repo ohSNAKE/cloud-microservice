@@ -1,4 +1,6 @@
-use crate::services::screener::{DividendAdjustment, NormalizedDividend, NormalizedKline, ScreenerPeriod};
+use crate::services::screener::{
+    DividendAdjustment, NormalizedDividend, NormalizedKline, ScreenerPeriod,
+};
 use crate::services::screener_source::{DividendKind, NormalizedQuote, PerShareBasis, RawDividend};
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, TimeZone, Utc};
 use std::collections::HashSet;
@@ -19,8 +21,13 @@ pub struct EastmoneyKlineRow {
     pub close: f64,
 }
 
-pub fn parse_quote(exchange: &str, payload: EastmoneyQuotePayload) -> Result<NormalizedQuote, String> {
-    let price_cents = payload.price_cents.ok_or_else(|| "missing quote price".to_string())?;
+pub fn parse_quote(
+    exchange: &str,
+    payload: EastmoneyQuotePayload,
+) -> Result<NormalizedQuote, String> {
+    let price_cents = payload
+        .price_cents
+        .ok_or_else(|| "missing quote price".to_string())?;
     if !price_cents.is_finite() || price_cents <= 0.0 {
         return Err("quote price must be positive and finite".into());
     }
@@ -56,8 +63,8 @@ pub fn parse_klines(
         if !row.close.is_finite() || row.close <= 0.0 {
             return Err("kline close must be positive and finite".into());
         }
-        let trading_date = NaiveDate::parse_from_str(&row.date, "%Y-%m-%d")
-            .map_err(|error| error.to_string())?;
+        let trading_date =
+            NaiveDate::parse_from_str(&row.date, "%Y-%m-%d").map_err(|error| error.to_string())?;
         let completed_at = china_offset
             .from_local_datetime(&trading_date.and_time(close_time))
             .single()
@@ -92,7 +99,10 @@ pub fn normalize_dividend(
     let ex_dividend_date = raw
         .ex_dividend_date
         .unwrap_or_else(|| NaiveDate::from_ymd_opt(1900, 1, 1).unwrap());
-    let eligible_cash_kind = matches!(raw.distribution_kind, DividendKind::Cash | DividendKind::SpecialCash);
+    let eligible_cash_kind = matches!(
+        raw.distribution_kind,
+        DividendKind::Cash | DividendKind::SpecialCash
+    );
     let source_cash_per_ten_shares = raw.cash_per_ten_shares;
     let per_ex_date_share = source_cash_per_ten_shares.unwrap_or(0.0) / 10.0;
     let confirmed_cash = raw.confirmed
@@ -206,7 +216,13 @@ mod tests {
     #[test]
     fn quote_and_kline_parser_reject_nonpositive_values_and_invalid_timestamps() {
         assert!(parse_quote("sh", invalid_price_quote()).is_err());
-        assert!(parse_klines("600001", "sh", ScreenerPeriod::Week, invalid_timestamp_kline_payload()).is_err());
+        assert!(parse_klines(
+            "600001",
+            "sh",
+            ScreenerPeriod::Week,
+            invalid_timestamp_kline_payload()
+        )
+        .is_err());
 
         let quote = parse_quote("sh", valid_quote()).unwrap();
         assert_eq!(quote.price, 12.34);

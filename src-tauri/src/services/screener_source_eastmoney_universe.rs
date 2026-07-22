@@ -36,7 +36,10 @@ pub fn collect_exchange_pages(
 
     let mut by_page = BTreeMap::new();
     for page in pages {
-        if page.page_no == 0 || page.page_no > total_pages || by_page.insert(page.page_no, page).is_some() {
+        if page.page_no == 0
+            || page.page_no > total_pages
+            || by_page.insert(page.page_no, page).is_some()
+        {
             return Err("duplicate or out-of-range page".into());
         }
     }
@@ -65,7 +68,11 @@ pub fn collect_exchange_pages(
     }
 
     let mut records = by_identity.into_values().collect::<Vec<_>>();
-    records.sort_by(|left, right| left.code.cmp(&right.code).then_with(|| left.exchange.cmp(&right.exchange)));
+    records.sort_by(|left, right| {
+        left.code
+            .cmp(&right.code)
+            .then_with(|| left.exchange.cmp(&right.exchange))
+    });
     if records.is_empty() {
         return Err("exchange has no ordinary equity records".into());
     }
@@ -99,13 +106,17 @@ pub fn classify_controller(
     if is_central_soe(trimmed, registry) {
         return ControllerClassification::CentralSoe;
     }
-    if matches!(trimmed, "地方国有企业" | "地方国资委" | "地方国企") || trimmed.contains("国资委") {
+    if matches!(trimmed, "地方国有企业" | "地方国资委" | "地方国企") || trimmed.contains("国资委")
+    {
         return ControllerClassification::LocalSoe;
     }
     ControllerClassification::NonSoe
 }
 
-fn normalize_row(exchange: &str, row: EastmoneyUniverseRow) -> Result<ScreenerUniverseRecord, String> {
+fn normalize_row(
+    exchange: &str,
+    row: EastmoneyUniverseRow,
+) -> Result<ScreenerUniverseRecord, String> {
     if row.code.trim().is_empty() || row.name.trim().is_empty() {
         return Err("missing universe identity".into());
     }
@@ -129,11 +140,17 @@ fn normalize_row(exchange: &str, row: EastmoneyUniverseRow) -> Result<ScreenerUn
     })
 }
 
-fn validate_exchange_records(exchange: &str, records: &[ScreenerUniverseRecord]) -> Result<(), String> {
+fn validate_exchange_records(
+    exchange: &str,
+    records: &[ScreenerUniverseRecord],
+) -> Result<(), String> {
     if records.is_empty() {
         return Err(format!("{exchange} universe is empty"));
     }
-    if records.iter().any(|record| record.exchange != exchange || !record.ordinary_equity) {
+    if records
+        .iter()
+        .any(|record| record.exchange != exchange || !record.ordinary_equity)
+    {
         return Err(format!("{exchange} universe contains invalid records"));
     }
     Ok(())
@@ -149,9 +166,15 @@ fn expected_secid(exchange: &str, code: &str) -> Result<String, String> {
 
 fn is_ordinary_equity(exchange: &str, code: &str) -> bool {
     match exchange {
-        "sh" => ["600", "601", "603", "605", "688"].iter().any(|prefix| code.starts_with(prefix)),
-        "sz" => ["000", "001", "002", "003", "300", "301"].iter().any(|prefix| code.starts_with(prefix)),
-        "bj" => ["4", "8", "9"].iter().any(|prefix| code.starts_with(prefix)),
+        "sh" => ["600", "601", "603", "605", "688"]
+            .iter()
+            .any(|prefix| code.starts_with(prefix)),
+        "sz" => ["000", "001", "002", "003", "300", "301"]
+            .iter()
+            .any(|prefix| code.starts_with(prefix)),
+        "bj" => ["4", "8", "9"]
+            .iter()
+            .any(|prefix| code.starts_with(prefix)),
         _ => false,
     }
 }
@@ -169,7 +192,11 @@ mod tests {
         )])
     }
 
-    fn page(total_pages: usize, page_no: usize, rows: Vec<EastmoneyUniverseRow>) -> EastmoneyUniversePage {
+    fn page(
+        total_pages: usize,
+        page_no: usize,
+        rows: Vec<EastmoneyUniverseRow>,
+    ) -> EastmoneyUniversePage {
         EastmoneyUniversePage {
             total_pages,
             page_no,
@@ -217,10 +244,7 @@ mod tests {
         assert!(collect_exchange_pages("sh", vec![page(2, 1, sh_row("600001"))]).is_err());
         assert!(collect_exchange_pages(
             "sh",
-            vec![
-                page(2, 1, sh_row("600001")),
-                page(3, 2, sh_row("600002")),
-            ],
+            vec![page(2, 1, sh_row("600001")), page(3, 2, sh_row("600002")),],
         )
         .is_err());
     }
@@ -233,7 +257,10 @@ mod tests {
                 vec![page(
                     1,
                     1,
-                    vec![sh_row_with_secid("600001", "1.600001"), sh_row_with_secid("600001", "1.600001")],
+                    vec![
+                        sh_row_with_secid("600001", "1.600001"),
+                        sh_row_with_secid("600001", "1.600001")
+                    ],
                 )],
             )
             .unwrap()
@@ -270,6 +297,9 @@ mod tests {
             classify_controller("民营企业", &registry()),
             ControllerClassification::NonSoe,
         );
-        assert_eq!(classify_controller("", &registry()), ControllerClassification::Unknown);
+        assert_eq!(
+            classify_controller("", &registry()),
+            ControllerClassification::Unknown
+        );
     }
 }

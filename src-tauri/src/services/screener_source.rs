@@ -74,7 +74,10 @@ pub trait ScreenerSource {
         valuation_date: NaiveDate,
     ) -> Result<CentralControllerRegistrySnapshot, String>;
 
-    fn fetch_universe(&self, valuation_date: NaiveDate) -> Result<Vec<ScreenerUniverseRecord>, String>;
+    fn fetch_universe(
+        &self,
+        valuation_date: NaiveDate,
+    ) -> Result<Vec<ScreenerUniverseRecord>, String>;
 
     fn fetch_dividends(
         &self,
@@ -163,7 +166,10 @@ where
         })
     }
 
-    fn fetch_universe(&self, valuation_date: NaiveDate) -> Result<Vec<ScreenerUniverseRecord>, String> {
+    fn fetch_universe(
+        &self,
+        valuation_date: NaiveDate,
+    ) -> Result<Vec<ScreenerUniverseRecord>, String> {
         let registry = self.fetch_controller_registry(valuation_date)?.registry;
         validate_complete_universe(
             self.fetch_exchange_universe("sh", &registry)?,
@@ -216,7 +222,10 @@ fn parse_universe_line(
         return Err("universe row exchange mismatch".into());
     }
     let eastmoney_secid = parts[4].trim().to_string();
-    controllers.insert((code.clone(), exchange.clone()), parts[5].trim().to_string());
+    controllers.insert(
+        (code.clone(), exchange.clone()),
+        parts[5].trim().to_string(),
+    );
 
     Ok(EastmoneyUniverseRow {
         code,
@@ -237,7 +246,9 @@ mod tests {
 
     fn fake_eastmoney_getter() -> impl Fn(&str) -> Result<String, String> + Clone {
         |key| match key {
-            "universe:sh" => Ok("600001|测试上海|50000000000|sh|1.600001|中国移动通信集团有限公司".into()),
+            "universe:sh" => {
+                Ok("600001|测试上海|50000000000|sh|1.600001|中国移动通信集团有限公司".into())
+            }
             "universe:sz" => Ok("000001|测试深圳|50000000000|sz|0.000001|民营企业".into()),
             "universe:bj" => Ok("830001|测试北交|50000000000|bj|0.830001|某市国资委".into()),
             _ => Err(format!("unexpected eastmoney key {key}")),
@@ -250,9 +261,13 @@ mod tests {
 
     #[test]
     fn concrete_source_combines_registry_universe_profile_and_market_clients() {
-        let source = EastmoneyScreenerSource::with_getters(fake_eastmoney_getter(), fake_sasac_getter());
+        let source =
+            EastmoneyScreenerSource::with_getters(fake_eastmoney_getter(), fake_sasac_getter());
         let records = source.fetch_universe(naive_date("2026-07-21")).unwrap();
-        assert_eq!(records[0].controller_classification, ControllerClassification::CentralSoe);
+        assert_eq!(
+            records[0].controller_classification,
+            ControllerClassification::CentralSoe
+        );
         assert_eq!(records[0].actual_controller, "中国移动通信集团有限公司");
     }
 }

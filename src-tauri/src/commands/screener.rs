@@ -93,7 +93,8 @@ mod tests {
         )
         .unwrap();
 
-        let result = add_screener_result_to_watchlist_in_conn(&conn, "600001", "sh", "测试").unwrap();
+        let result =
+            add_screener_result_to_watchlist_in_conn(&conn, "600001", "sh", "测试").unwrap();
 
         assert!(!result.added);
         assert!(result.already_present);
@@ -110,9 +111,21 @@ mod tests {
     #[test]
     fn screener_watchlist_add_accepts_sh_sz_and_bj_only() {
         let conn = setup_quant_watchlist_schema();
-        assert!(add_screener_result_to_watchlist_in_conn(&conn, "600001", "sh", "上证").unwrap().added);
-        assert!(add_screener_result_to_watchlist_in_conn(&conn, "000001", "sz", "深证").unwrap().added);
-        assert!(add_screener_result_to_watchlist_in_conn(&conn, "830001", "bj", "北证").unwrap().added);
+        assert!(
+            add_screener_result_to_watchlist_in_conn(&conn, "600001", "sh", "上证")
+                .unwrap()
+                .added
+        );
+        assert!(
+            add_screener_result_to_watchlist_in_conn(&conn, "000001", "sz", "深证")
+                .unwrap()
+                .added
+        );
+        assert!(
+            add_screener_result_to_watchlist_in_conn(&conn, "830001", "bj", "北证")
+                .unwrap()
+                .added
+        );
         assert!(add_screener_result_to_watchlist_in_conn(&conn, "00700", "hk", "腾讯").is_err());
     }
 }

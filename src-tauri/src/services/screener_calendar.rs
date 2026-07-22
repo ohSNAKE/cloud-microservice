@@ -1,5 +1,7 @@
 use crate::models::ScreenerRefreshSchedule;
-use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, Timelike};
+use chrono::{
+    DateTime, Datelike, Duration, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, Timelike,
+};
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -39,16 +41,23 @@ fn next_refresh_china_time(
     if time < morning_open {
         return at_china_time(date, morning_open);
     }
-    if (morning_open..=morning_close).contains(&time) || (afternoon_open..=afternoon_close).contains(&time) {
+    if (morning_open..=morning_close).contains(&time)
+        || (afternoon_open..=afternoon_close).contains(&time)
+    {
         let aligned = align_next_quarter(now + Duration::minutes(1));
-        if aligned.time() <= morning_close || ((afternoon_open..=afternoon_close).contains(&aligned.time())) {
+        if aligned.time() <= morning_close
+            || ((afternoon_open..=afternoon_close).contains(&aligned.time()))
+        {
             return aligned;
         }
     }
     if time > morning_close && time < afternoon_open {
         return at_china_time(date, afternoon_open);
     }
-    at_china_time(next_trading_day(date + Duration::days(1), holidays), morning_open)
+    at_china_time(
+        next_trading_day(date + Duration::days(1), holidays),
+        morning_open,
+    )
 }
 
 fn is_live_session(now: DateTime<FixedOffset>, holidays: &HashSet<NaiveDate>) -> bool {
@@ -56,8 +65,10 @@ fn is_live_session(now: DateTime<FixedOffset>, holidays: &HashSet<NaiveDate>) ->
         return false;
     }
     let time = now.time();
-    (NaiveTime::from_hms_opt(9, 30, 0).unwrap()..=NaiveTime::from_hms_opt(11, 30, 0).unwrap()).contains(&time)
-        || (NaiveTime::from_hms_opt(13, 0, 0).unwrap()..=NaiveTime::from_hms_opt(15, 0, 0).unwrap()).contains(&time)
+    (NaiveTime::from_hms_opt(9, 30, 0).unwrap()..=NaiveTime::from_hms_opt(11, 30, 0).unwrap())
+        .contains(&time)
+        || (NaiveTime::from_hms_opt(13, 0, 0).unwrap()..=NaiveTime::from_hms_opt(15, 0, 0).unwrap())
+            .contains(&time)
 }
 
 fn align_next_quarter(time: DateTime<FixedOffset>) -> DateTime<FixedOffset> {
@@ -79,7 +90,8 @@ fn next_trading_day(mut date: NaiveDate, holidays: &HashSet<NaiveDate>) -> Naive
 }
 
 fn is_trading_day(date: NaiveDate, holidays: &HashSet<NaiveDate>) -> bool {
-    !matches!(date.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun) && !holidays.contains(&date)
+    !matches!(date.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun)
+        && !holidays.contains(&date)
 }
 
 fn at_china_time(date: NaiveDate, time: NaiveTime) -> DateTime<FixedOffset> {
@@ -106,7 +118,13 @@ mod tests {
     use super::*;
     use chrono::{FixedOffset, TimeZone};
 
-    fn china_time(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> chrono::DateTime<FixedOffset> {
+    fn china_time(
+        year: i32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        minute: u32,
+    ) -> chrono::DateTime<FixedOffset> {
         FixedOffset::east_opt(8 * 3600)
             .unwrap()
             .with_ymd_and_hms(year, month, day, hour, minute, 0)
@@ -116,9 +134,18 @@ mod tests {
 
     #[test]
     fn schedule_returns_next_opening_during_break_weekend_holiday_and_after_close() {
-        assert_eq!(schedule_at(china_time(2026, 7, 21, 11, 31)).next_refresh_at, "2026-07-21T05:00:00Z");
-        assert_eq!(schedule_at(china_time(2026, 7, 25, 10, 0)).next_refresh_at, "2026-07-27T01:30:00Z");
-        assert_eq!(schedule_at(china_time(2026, 10, 1, 10, 0)).next_refresh_at, "2026-10-02T01:30:00Z");
+        assert_eq!(
+            schedule_at(china_time(2026, 7, 21, 11, 31)).next_refresh_at,
+            "2026-07-21T05:00:00Z"
+        );
+        assert_eq!(
+            schedule_at(china_time(2026, 7, 25, 10, 0)).next_refresh_at,
+            "2026-07-27T01:30:00Z"
+        );
+        assert_eq!(
+            schedule_at(china_time(2026, 10, 1, 10, 0)).next_refresh_at,
+            "2026-10-02T01:30:00Z"
+        );
     }
 
     #[test]

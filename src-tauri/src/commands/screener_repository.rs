@@ -21,7 +21,9 @@ pub fn persist_completed_run(
     run: PendingScreenerRun,
     results: Vec<ScreenerResult>,
 ) -> Result<ScreenerDashboard, String> {
-    let tx = conn.unchecked_transaction().map_err(|error| error.to_string())?;
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
     tx.execute(
         "INSERT INTO screener_runs
          (status, started_at, completed_at, candidate_count, match_count, skipped_count, failure_code, failure_message)
@@ -166,37 +168,38 @@ fn read_results(conn: &Connection, run_id: i64) -> Result<Vec<ScreenerResult>, S
         .map_err(|error| error.to_string())?;
     let results = stmt
         .query_map([run_id], |row| {
-        let matched_periods_json: String = row.get(14)?;
-        let matched_periods = serde_json::from_str::<Vec<String>>(&matched_periods_json).map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(
-                14,
-                rusqlite::types::Type::Text,
-                Box::new(error),
-            )
-        })?;
-        Ok(ScreenerResult {
-            code: row.get(0)?,
-            exchange: row.get(1)?,
-            name: row.get(2)?,
-            market_cap_cny: row.get(3)?,
-            cash_dividend_per_share: row.get(4)?,
-            dividend_yield: row.get(5)?,
-            current_price: row.get(6)?,
-            price_observed_at: row.get(7)?,
-            daily_lower_band: row.get(8)?,
-            daily_distance: row.get(9)?,
-            daily_kline_completed_at: row.get(10)?,
-            weekly_lower_band: row.get(11)?,
-            weekly_distance: row.get(12)?,
-            weekly_kline_completed_at: row.get(13)?,
-            matched_periods,
-            source_metadata: row.get(15)?,
-            fundamental_observed_at: row.get(16)?,
+            let matched_periods_json: String = row.get(14)?;
+            let matched_periods = serde_json::from_str::<Vec<String>>(&matched_periods_json)
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        14,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
+            Ok(ScreenerResult {
+                code: row.get(0)?,
+                exchange: row.get(1)?,
+                name: row.get(2)?,
+                market_cap_cny: row.get(3)?,
+                cash_dividend_per_share: row.get(4)?,
+                dividend_yield: row.get(5)?,
+                current_price: row.get(6)?,
+                price_observed_at: row.get(7)?,
+                daily_lower_band: row.get(8)?,
+                daily_distance: row.get(9)?,
+                daily_kline_completed_at: row.get(10)?,
+                weekly_lower_band: row.get(11)?,
+                weekly_distance: row.get(12)?,
+                weekly_kline_completed_at: row.get(13)?,
+                matched_periods,
+                source_metadata: row.get(15)?,
+                fundamental_observed_at: row.get(16)?,
+            })
         })
-    })
-    .map_err(|error| error.to_string())?
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
     Ok(results)
 }
 
@@ -252,7 +255,12 @@ mod tests {
     #[test]
     fn completed_partial_run_replaces_displayed_results_atomically() {
         let conn = setup_screener_schema();
-        persist_completed_run(&conn, run("partial", "2026-07-21T01:00:00Z"), vec![result("600001")]).unwrap();
+        persist_completed_run(
+            &conn,
+            run("partial", "2026-07-21T01:00:00Z"),
+            vec![result("600001")],
+        )
+        .unwrap();
         let dashboard = read_screener_dashboard(&conn).unwrap();
         assert_eq!(dashboard.displayed_run.unwrap().status, "partial");
         assert_eq!(dashboard.results.len(), 1);
@@ -261,11 +269,24 @@ mod tests {
     #[test]
     fn failed_attempt_retains_last_completed_results_and_marks_dashboard_stale() {
         let conn = setup_screener_schema();
-        persist_completed_run(&conn, run("success", "2026-07-21T01:00:00Z"), vec![result("600001")]).unwrap();
+        persist_completed_run(
+            &conn,
+            run("success", "2026-07-21T01:00:00Z"),
+            vec![result("600001")],
+        )
+        .unwrap();
         persist_failed_attempt(&conn, "provider_unavailable", "timeout").unwrap();
         let dashboard = read_screener_dashboard(&conn).unwrap();
         assert!(dashboard.is_stale);
         assert_eq!(dashboard.results[0].code, "600001");
-        assert_eq!(dashboard.latest_failed_attempt.unwrap().failure_summary.unwrap().code, "provider_unavailable");
+        assert_eq!(
+            dashboard
+                .latest_failed_attempt
+                .unwrap()
+                .failure_summary
+                .unwrap()
+                .code,
+            "provider_unavailable"
+        );
     }
 }
