@@ -25,3 +25,4 @@ tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "macros"
 chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.16"
 unicode-normalization = "0.1"
+scraper = "0.20"

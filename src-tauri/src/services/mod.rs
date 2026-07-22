@@ -5,4 +5,5 @@ pub mod screener;
 pub mod screener_source;
 pub mod screener_source_eastmoney_market;
 pub mod screener_source_eastmoney_universe;
+pub mod screener_source_sasac;
 pub mod scheduler;
