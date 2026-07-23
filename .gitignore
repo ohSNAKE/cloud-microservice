@@ -7,6 +7,7 @@ release/
 *.db
 *.log
 .env
+.worktrees/
 scripts/setup-ai-config.local.sql
 
 # Tauri 图标由 assets/app-icon-source.png 本地生成，勿提交（避免 pull 冲突）
