@@ -50,7 +50,7 @@
 
 - 口径分段控件包含“最近完整年度”和“近 12 个月”。
 - 两种口径数据始终保留在结果中，切换只改变默认排序与重点展示。
-- 支持股息率区间和聚合方案状态筛选。聚合状态取最近一条有效现金方案的统一状态。
+- 支持股息率区间和聚合方案状态筛选。聚合状态取最近一条有效现金方案的统一状态；“最近”依次按公告日期、报告期、除息日降序确定，`cancelled` 和 `unknown` 均不属于有效方案。没有有效方案时聚合状态为空。
 - 支持按股息率、每股现金分红和股票名称排序。
 
 口径切换到“最近完整年度”时，默认按该年度披露口径股息率降序；切换到“近 12 个月”时，默认按近 12 个月已实施股息率降序。用户手动选择其他排序后，切换口径会重置为对应默认排序。重点列使用现有表格强调色，不隐藏另一口径。
@@ -116,17 +116,35 @@
 
 `DividendQueryInput` 包含调用方生成的 `query_id`、查询模式，以及行业 ID 或规范化股票引用。无效的模式和条件组合在发起网络请求前返回验证错误。
 
+核心 DTO 字段固定如下：
+
+- `DividendIndustry { id, name }`。
+- `DividendStockRef { code, exchange, name, industry_id, industry_name }`，行业字段在股票搜索无法确定时可为 `null`。
+- `DividendRecord { provider_record_id, report_date, announcement_date, plan_text, cash_per_ten_shares, cash_per_share, status, record_date, ex_dividend_date, announcement_link, aggregation_eligible, quality_warning }`；除 `plan_text`、`status`、`aggregation_eligible` 外，第三方缺失字段可为 `null`。
+- `DividendPeriodMetrics { fiscal_year, implemented_per_share, pending_per_share, disclosed_per_share, implemented_yield, disclosed_yield }`，没有符合定义年度时整个对象为 `null`。
+- `DividendTrailingMetrics { period_start, period_end, implemented_per_share, implemented_yield }`。
+- `DividendStockSummary { stock, current_price, quote_time, quote_time_kind, latest_effective_status, latest_ex_dividend_date, latest_annual, trailing_twelve_months, dividend_fetched_at, quality_warnings }`。
+- `DividendStockDetail { summary, records, source_name, source_url }`。
+- `AnnouncementLink { kind, url, label }`，`kind` 为 `original`、`search` 或 `none`；`none` 时 `url` 为 `null`。
+- `CommandError { code, message, retryable }`。
+
+金额和价格使用 JSON number，股息率使用小数比率而非百分数，例如 `0.052` 表示 `5.2%`。日期使用 `YYYY-MM-DD`，时间使用带时区的 RFC 3339 字符串。`exchange` 只允许 `SH`、`SZ`、`BJ`；`quote_time_kind` 为 `provider` 或 `received_at`。
+
 `DividendQueryEvent` 是按 `type` 判别的联合类型：
 
 - `started { query_id, total, started_at }`
 - `item { query_id, completed, total, result }`
-- `finished { query_id, completed, total, succeeded, failed, quote_observed_at, dividend_fetched_at }`
+- `finished { query_id, completed, total, succeeded, failed, finished_at }`
 - `cancelled { query_id, completed, total }`
 - `failed { query_id, code, message, retryable }`
 
 `result` 是 `success { stock, summary }` 或 `failure { stock, stage, code, message }`。所有可缺失数值和日期均序列化为 `null`，不使用零或空字符串代替。`CommandError` 与失败事件均包含稳定的机器可读 `code` 和可展示 `message`。
 
-前端为每次查询生成唯一查询 ID。启动新查询前请求取消旧 ID；卸载页面时取消当前查询。后端维护可取消标记，在每次网络请求前后检查；取消后停止派发新任务并发送一次 `cancelled`。由于已经发出的网络请求不保证可中断，前端仍必须按查询 ID 丢弃过期事件。
+每个查询遵循 `created -> running -> finished | cancelled | failed` 状态机，并且只能发送一个终态事件。后端通过原子状态转换决定终态；`finished`、`cancelled`、`failed` 中第一个成功转换者获胜，之后的完成或取消请求不得再发送终态。若最后一个任务先完成并转换为 `finished`，随后取消只返回成功而不发送 `cancelled`；若取消先转换为 `cancelled`，最后一个任务的结果被丢弃。
+
+前端为每次查询生成唯一查询 ID。启动新查询前请求取消旧 ID；卸载页面时取消当前查询。后端维护可取消标记，在每次网络请求前后检查；取消后停止派发新任务。由于已经发出的网络请求不保证可中断，前端仍必须按查询 ID 丢弃过期事件。
+
+`start_dividend_query` 的命令 Future 保持到查询终态并成功发送终态事件后才返回。如果 channel 发送失败，后端停止派发任务并结束命令；如果命令返回或抛错时前端尚未收到匹配的终态，前端把查询标记为“异常中断”，保留已完成行并显示页面级重试提示，不继续等待。已经收到唯一终态后，命令返回不再改变 UI 状态。
 
 ### Rust 服务
 
@@ -141,7 +159,9 @@
 
 现有 `screener_source_eastmoney_market.rs` 中的 URL 构造和 JSON 解析是可复用起点。共享层只负责第三方原始字段解析和无损 DTO；本页面的年度选择、状态汇总、去重和股息率计算放在独立领域层。扩展共享模型时必须保留现有 `NormalizedDividend` 行为，并用现有选股固定样本做回归测试，不能让新字段改变当前选股结果。
 
-行业查询最多同时进行 6 个单股分红请求。单次请求超时 10 秒；仅网络错误、HTTP 429 和 5xx 重试 1 次，重试前等待 500ms，解析错误和 4xx 不重试。行情按最多 100 只股票分块批量请求；批次失败后对该批重试 1 次，仍失败则对应股票保留分红摘要，行情和股息率置空。股票在分红阶段得到成功或最终失败后计入 `completed`，每只股票只增加一次进度。
+行业查询最多同时进行 6 个单股分红请求。单次请求超时 10 秒；仅网络错误、HTTP 429 和 5xx 重试 1 次，重试前等待 500ms，解析错误和 4xx 不重试。行情按最多 100 只股票分块批量请求；批次失败后对该批重试 1 次，仍失败则对应股票保留分红摘要，行情和股息率置空。
+
+股票只有在分红请求和所属行情批次都达到成功或最终失败后才发送一次不可变的 `item`，并增加一次 `completed`。分红失败时无需等待行情即可发送 `failure`；分红成功时等待行情终态后发送包含行级 `quote_time` 的 `success`。`finished.completed` 必须等于 `total`；取消或异常失败可小于 `total`。
 
 ## 数据口径
 
@@ -158,7 +178,9 @@
 
 统一状态包含：`proposal`、`approved`、`implemented`、`cancelled` 和 `unknown`。界面分别显示“预案”“已通过”“已实施”“已取消/终止”“状态未知”。
 
-同一第三方记录 ID 的多次返回只保留公告时间最新的一条。没有稳定记录 ID 时，使用股票、报告期、每 10 股现金金额和除息日组成替代键；替代键相同则保留公告时间最新的一条。状态为取消、终止、否决或不分配的修订记录归一化为 `cancelled`，金额不得进入任何合计。无法可靠关联的记录不做猜测性合并，保留并标记数据质量提示。
+同一第三方记录 ID 的多次返回只保留公告时间最新的一条。状态为取消、终止、否决或不分配的最新修订归一化为 `cancelled`，金额不得进入任何合计。
+
+没有稳定记录 ID 时，先按股票和报告期分组。组内只有一条记录时可参与聚合；多条记录只有在方案金额、除息日和状态均相同的情况下视为重复并保留公告时间最新的一条。其余多记录组可能是修订，也可能是同报告期多次派息，无法可靠关联，因此全部保留在详情、设置 `aggregation_eligible = false` 并给出“方案可能重复或修订，未计入汇总”的质量提示。该保守策略优先避免虚高统计，不猜测合并关系。
 
 ### 最近完整年度
 
