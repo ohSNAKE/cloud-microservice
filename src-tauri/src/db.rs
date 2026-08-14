@@ -342,6 +342,11 @@ pub fn ensure_screener_schema(conn: &Connection) -> Result<(), rusqlite::Error> 
           price REAL NOT NULL, observed_at TEXT NOT NULL,
           PRIMARY KEY (code, exchange, valuation_date)
         );
+        CREATE TABLE IF NOT EXISTS screener_actual_controllers (
+          code TEXT NOT NULL, exchange TEXT NOT NULL, valuation_date TEXT NOT NULL,
+          actual_controller TEXT NOT NULL, observed_at TEXT NOT NULL,
+          PRIMARY KEY (code, exchange, valuation_date)
+        );
         CREATE TABLE IF NOT EXISTS screener_runs (
           id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT NOT NULL, started_at TEXT NOT NULL,
           completed_at TEXT NOT NULL, candidate_count INTEGER NOT NULL, match_count INTEGER NOT NULL,
@@ -386,6 +391,18 @@ pub fn prune_derived_screener_data(conn: &Connection) -> Result<(), rusqlite::Er
             [],
         )?;
     }
+
+    // Actual controllers barely change; keep a longer window so cache survives across days.
+    conn.execute(
+        "DELETE FROM screener_actual_controllers
+         WHERE valuation_date NOT IN (
+           SELECT valuation_date FROM (
+             SELECT DISTINCT valuation_date FROM screener_actual_controllers
+             ORDER BY valuation_date DESC LIMIT 30
+           )
+         )",
+        [],
+    )?;
 
     conn.execute(
         "DELETE FROM screener_results

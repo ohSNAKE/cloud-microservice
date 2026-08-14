@@ -3,6 +3,7 @@ use crate::services::screener::{
 };
 use crate::services::screener_source::{DividendKind, NormalizedQuote, PerShareBasis, RawDividend};
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, TimeZone, Utc};
+use serde::Deserialize;
 use std::collections::HashSet;
 
 pub const EASTMONEY_QUOTE_URL: &str = "https://push2.eastmoney.com/api/qt/stock/get";
@@ -19,6 +20,162 @@ pub struct EastmoneyQuotePayload {
 pub struct EastmoneyKlineRow {
     pub date: String,
     pub close: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyQuoteResponse {
+    data: Option<EastmoneyQuoteData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyQuoteData {
+    f43: Option<f64>,
+    f124: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyKlineResponse {
+    data: Option<EastmoneyKlineData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyKlineData {
+    klines: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyDividendResponse {
+    result: Option<EastmoneyDividendResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyDividendResult {
+    data: Vec<EastmoneyDividendRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyDividendRow {
+    #[serde(rename = "PRETAX_BONUS_RMB")]
+    pretax_bonus_rmb: Option<f64>,
+    #[serde(rename = "EX_DIVIDEND_DATE")]
+    ex_dividend_date: Option<String>,
+    #[serde(rename = "ASSIGN_PROGRESS")]
+    assign_progress: Option<String>,
+}
+
+pub fn build_quote_url(code: &str, exchange: &str) -> Result<String, String> {
+    Ok(format!(
+        "{EASTMONEY_QUOTE_URL}?secid={}&fields=f43,f58,f124,f292",
+        eastmoney_secid(code, exchange)?
+    ))
+}
+
+pub fn build_kline_url(
+    code: &str,
+    exchange: &str,
+    period: ScreenerPeriod,
+) -> Result<String, String> {
+    let klt = match period {
+        ScreenerPeriod::Day => 101,
+        ScreenerPeriod::Week => 102,
+    };
+    Ok(format!(
+        "{EASTMONEY_KLINE_URL}?secid={}&klt={klt}&fqt=0&lmt=80&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56",
+        eastmoney_secid(code, exchange)?
+    ))
+}
+
+pub fn build_dividend_url(code: &str) -> String {
+    format!(
+        "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_SHAREBONUS_DET&columns=ALL&filter=(SECURITY_CODE%3D%22{code}%22)&pageNumber=1&pageSize=50&source=WEB&client=WEB"
+    )
+}
+
+pub fn parse_quote_json(code: &str, exchange: &str, text: &str) -> Result<NormalizedQuote, String> {
+    let body: EastmoneyQuoteResponse =
+        serde_json::from_str(text).map_err(|error| error.to_string())?;
+    let data = body.data.ok_or_else(|| "missing quote data".to_string())?;
+    parse_quote(
+        exchange,
+        EastmoneyQuotePayload {
+            code: code.into(),
+            price_cents: data.f43,
+            observed_unix_seconds: data
+                .f124
+                .filter(|timestamp| *timestamp > 0)
+                .or_else(|| Some(Utc::now().timestamp())),
+        },
+    )
+}
+
+pub fn parse_kline_json(
+    code: &str,
+    exchange: &str,
+    period: ScreenerPeriod,
+    text: &str,
+) -> Result<Vec<NormalizedKline>, String> {
+    let body: EastmoneyKlineResponse =
+        serde_json::from_str(text).map_err(|error| error.to_string())?;
+    let rows = body
+        .data
+        .and_then(|data| data.klines)
+        .ok_or_else(|| "missing kline data".to_string())?
+        .into_iter()
+        .filter_map(|line| {
+            let parts = line.split(',').collect::<Vec<_>>();
+            Some(EastmoneyKlineRow {
+                date: parts.first()?.to_string(),
+                close: parts.get(2)?.parse::<f64>().ok()?,
+            })
+        })
+        .collect::<Vec<_>>();
+    parse_klines(code, exchange, period, rows)
+}
+
+pub fn parse_dividend_json(
+    code: &str,
+    exchange: &str,
+    text: &str,
+) -> Result<Vec<NormalizedDividend>, String> {
+    let body: EastmoneyDividendResponse =
+        serde_json::from_str(text).map_err(|error| error.to_string())?;
+    body.result
+        .ok_or_else(|| "missing dividend data".to_string())?
+        .data
+        .into_iter()
+        .map(|row| {
+            let ex_dividend_date = row
+                .ex_dividend_date
+                .as_deref()
+                .and_then(|value| value.get(0..10))
+                .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok());
+            normalize_dividend(
+                code,
+                exchange,
+                RawDividend {
+                    ex_dividend_date,
+                    cash_per_ten_shares: row.pretax_bonus_rmb,
+                    distribution_kind: DividendKind::Cash,
+                    confirmed: row
+                        .assign_progress
+                        .as_deref()
+                        .map(|value| value.contains("实施"))
+                        .unwrap_or(false),
+                    per_share_basis: PerShareBasis::Current,
+                },
+                None,
+                None,
+            )
+        })
+        .collect()
+}
+
+fn eastmoney_secid(code: &str, exchange: &str) -> Result<String, String> {
+    match exchange {
+        "sh" => Ok(format!("1.{code}")),
+        "sz" | "bj" => Ok(format!("0.{code}")),
+        _ => Err("unsupported exchange".into()),
+    }
 }
 
 pub fn parse_quote(
@@ -302,5 +459,30 @@ mod tests {
         )
         .unwrap();
         assert!(!missing_date.confirmed_cash);
+    }
+
+    #[test]
+    fn parses_eastmoney_quote_kline_and_dividend_json() {
+        let quote =
+            parse_quote_json("600941", "sh", r#"{"data":{"f43":9409,"f124":1784707200}}"#).unwrap();
+        assert_eq!(quote.price, 94.09);
+
+        let bars = parse_kline_json(
+            "600941",
+            "sh",
+            ScreenerPeriod::Day,
+            r#"{"data":{"klines":["2026-07-21,95.81,94.94,96.47,94.01,194196","2026-07-22,94.70,94.09,94.80,92.01,212483"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(bars.len(), 2);
+        assert_eq!(bars[1].close, 94.09);
+
+        let dividends = parse_dividend_json(
+            "600941",
+            "sh",
+            r#"{"result":{"data":[{"PRETAX_BONUS_RMB":22.916,"EX_DIVIDEND_DATE":"2025-06-06 00:00:00","ASSIGN_PROGRESS":"实施分配"}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(dividends[0].gross_per_current_share, 2.2916);
     }
 }

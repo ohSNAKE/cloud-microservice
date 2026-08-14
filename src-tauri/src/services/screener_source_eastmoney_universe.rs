@@ -1,8 +1,10 @@
 use crate::services::screener::{is_central_soe, CentralControllerRegistry};
 use crate::services::screener_source::{ControllerClassification, ScreenerUniverseRecord};
+use serde::Deserialize;
+use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
-pub const EASTMONEY_LIST_URL: &str = "https://82.push2.eastmoney.com/api/qt/clist/get";
+pub const EASTMONEY_LIST_URL: &str = "https://push2delay.eastmoney.com/api/qt/clist/get";
 pub const EASTMONEY_DATACENTER_URL: &str = "https://datacenter-web.eastmoney.com/api/data/v1/get";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +21,120 @@ pub struct EastmoneyUniverseRow {
     pub market_cap_cny: f64,
     pub market: String,
     pub eastmoney_secid: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyClistResponse {
+    data: Option<EastmoneyClistData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyClistData {
+    total: usize,
+    diff: Vec<EastmoneyClistRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyClistRow {
+    f12: String,
+    f14: String,
+    f20: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyProfileResponse {
+    result: Option<EastmoneyProfileResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyProfileResult {
+    data: Vec<EastmoneyProfileRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EastmoneyProfileRow {
+    #[serde(rename = "ACTUAL_HOLDER")]
+    actual_holder: Option<String>,
+}
+
+pub fn build_universe_page_url(
+    exchange: &str,
+    page_no: usize,
+    page_size: usize,
+) -> Result<String, String> {
+    let fs = match exchange {
+        "sh" => "m:1+t:2,m:1+t:23",
+        "sz" => "m:0+t:6,m:0+t:80",
+        "bj" => "m:0+t:81+s:2048",
+        _ => return Err("unsupported exchange".into()),
+    };
+    Ok(format!(
+        "{EASTMONEY_LIST_URL}?pn={page_no}&pz={page_size}&po=1&np=1&fltt=2&invt=2&fid=f3&fs={fs}&fields=f12,f14,f20"
+    ))
+}
+
+pub fn build_actual_controller_url(code: &str, exchange: &str) -> Result<String, String> {
+    let suffix = match exchange {
+        "sh" => "SH",
+        "sz" => "SZ",
+        "bj" => "BJ",
+        _ => return Err("unsupported exchange".into()),
+    };
+    Ok(format!(
+        "{EASTMONEY_DATACENTER_URL}?reportName=RPT_F10_BASIC_ORGINFO&columns=ALL&filter=(SECUCODE%3D%22{code}.{suffix}%22)&pageNumber=1&pageSize=1&source=WEB&client=WEB"
+    ))
+}
+
+pub fn parse_universe_page_json(
+    exchange: &str,
+    page_no: usize,
+    page_size: usize,
+    text: &str,
+) -> Result<EastmoneyUniversePage, String> {
+    let body: EastmoneyClistResponse =
+        serde_json::from_str(text).map_err(|error| error.to_string())?;
+    let data = body
+        .data
+        .ok_or_else(|| "missing universe data".to_string())?;
+    let total_pages = data.total.div_ceil(page_size).max(1);
+    let mut rows = Vec::with_capacity(data.diff.len());
+    for row in data.diff {
+        let eastmoney_secid = expected_secid(exchange, &row.f12)?;
+        let market_cap_cny = parse_market_cap(row.f20)?;
+        rows.push(EastmoneyUniverseRow {
+            code: row.f12,
+            name: row.f14,
+            market_cap_cny,
+            market: exchange.into(),
+            eastmoney_secid,
+        });
+    }
+    Ok(EastmoneyUniversePage {
+        total_pages,
+        page_no,
+        rows,
+    })
+}
+
+pub fn parse_actual_controller_json(text: &str) -> Result<String, String> {
+    let body: EastmoneyProfileResponse =
+        serde_json::from_str(text).map_err(|error| error.to_string())?;
+    body.result
+        .and_then(|result| result.data.into_iter().next())
+        .and_then(|row| row.actual_holder)
+        .filter(|controller| !controller.trim().is_empty())
+        .ok_or_else(|| "missing actual controller".to_string())
+}
+
+fn parse_market_cap(value: Option<Value>) -> Result<f64, String> {
+    match value {
+        Some(Value::Number(number)) => number
+            .as_f64()
+            .ok_or_else(|| "invalid market capitalization".to_string()),
+        Some(Value::String(text)) if text.trim() == "-" => Ok(0.0),
+        Some(Value::Null) | None => Ok(0.0),
+        Some(_) => Err("invalid market capitalization".into()),
+    }
 }
 
 pub fn collect_exchange_pages(
@@ -301,5 +417,50 @@ mod tests {
             classify_controller("", &registry()),
             ControllerClassification::Unknown
         );
+    }
+
+    #[test]
+    fn universe_page_url_uses_reachable_delayed_quote_host() {
+        let url = build_universe_page_url("sh", 1, 100).unwrap();
+
+        assert!(url.starts_with("https://push2delay.eastmoney.com/api/qt/clist/get?"));
+    }
+
+    #[test]
+    fn parses_eastmoney_universe_page_json() {
+        let page = parse_universe_page_json(
+            "sh",
+            1,
+            2,
+            r#"{"data":{"total":3,"diff":[{"f12":"600941","f14":"中国移动","f20":2000000000000},{"f12":"600028","f14":"中国石化","f20":700000000000}]}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(page.total_pages, 2);
+        assert_eq!(page.rows[0].eastmoney_secid, "1.600941");
+        assert_eq!(page.rows[0].market_cap_cny, 2_000_000_000_000.0);
+    }
+
+    #[test]
+    fn dash_market_cap_placeholder_parses_as_zero() {
+        let page = parse_universe_page_json(
+            "sh",
+            18,
+            100,
+            r#"{"data":{"total":1,"diff":[{"f12":"688828","f14":"国仪公司","f20":"-"}]}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(page.rows[0].market_cap_cny, 0.0);
+    }
+
+    #[test]
+    fn parses_actual_controller_from_profile_json() {
+        let controller = parse_actual_controller_json(
+            r#"{"result":{"data":[{"ACTUAL_HOLDER":"中国移动通信集团有限公司"}]},"success":true}"#,
+        )
+        .unwrap();
+
+        assert_eq!(controller, "中国移动通信集团有限公司");
     }
 }

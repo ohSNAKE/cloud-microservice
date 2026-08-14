@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ScreenerDashboard, ScreenerResult } from "../types";
-import { defaultScreenerSort, formatCnyBillion, formatNullableNumber, formatPercentValue, screenerState } from "./screenerView";
+import {
+  defaultScreenerSort,
+  formatCnyBillion,
+  formatNullableNumber,
+  formatPercentValue,
+  screenerState,
+  shouldShowRefreshSuccess,
+} from "./screenerView";
 
 function row(code: string, exchange: "sh" | "sz" | "bj", daily: number | null, weekly: number | null): ScreenerResult {
   return {
@@ -58,5 +65,36 @@ describe("screenerView", () => {
     expect(formatCnyBillion(50_000_000_000)).toBe("500.00亿");
     expect(formatPercentValue(0.0523)).toBe("5.23%");
     expect(formatNullableNumber(null)).toBe("--");
+  });
+
+  it("does not treat failed refresh dashboards as successful refreshes", () => {
+    expect(shouldShowRefreshSuccess(dashboard())).toBe(false);
+    expect(
+      shouldShowRefreshSuccess(
+        dashboard({
+          latest_failed_attempt: {
+            started_at: "a",
+            completed_at: "b",
+            failure_summary: { code: "provider_unavailable", message: "timeout", skipped_count: 0 },
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldShowRefreshSuccess(
+        dashboard({
+          displayed_run: {
+            id: 1,
+            status: "success",
+            started_at: "a",
+            completed_at: "b",
+            candidate_count: 1,
+            match_count: 0,
+            skipped_count: 0,
+            failure_summary: null,
+          },
+        }),
+      ),
+    ).toBe(true);
   });
 });

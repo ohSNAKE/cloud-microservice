@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Col, Row, Statistic, Tooltip, Typography, Alert } from "antd";
+import { Alert, Button, Card, Statistic, Tooltip, Typography } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -147,7 +147,6 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        subtitle="可动用资产 + 投资市值 = 真实净资产"
         actions={
           <>
             <Tooltip title={amountsHidden ? "显示金额" : "隐藏金额"}>
@@ -194,38 +193,37 @@ export default function DashboardPage() {
         />
       )}
 
-      <Row gutter={[16, 16]} className="dashboard-grid dashboard-grid--4">
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card dashboard-stat-tile" hoverable>
-            <div className="label">总资产</div>
-            <div className="value">{displayMoney(summary.total_assets, amountsHidden)}</div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card dashboard-stat-tile">
-            <div className="label">可动用资产</div>
-            <div className="value">{displayMoney(summary.liquid_assets, amountsHidden)}</div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card dashboard-stat-tile" hoverable onClick={() => navigate("/holdings")}>
-            <div className="label">投资市值</div>
-            <div className="value">{displayMoney(summary.holding_value, amountsHidden)}</div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card dashboard-stat-tile">
-            <div className="label">持仓盈亏</div>
-            <div className={`value ${summary.holding_profit >= 0 ? "profit-positive" : "profit-negative"}`}>
-              {displayMoney(summary.holding_profit, amountsHidden)}
+      <div className="dashboard-overview">
+        <Card className="stat-card dashboard-hero">
+          <div className="dashboard-hero__body">
+            <div>
+              <Typography.Text className="dashboard-hero__eyebrow">净资产</Typography.Text>
+              <div className="dashboard-hero__value">{displayMoney(summary.total_assets, amountsHidden)}</div>
+              <Typography.Text type="secondary" className="dashboard-hero__description">
+                可动用资产与投资市值的合计
+              </Typography.Text>
             </div>
-          </Card>
-        </Col>
-      </Row>
+            <div className="dashboard-hero__metrics">
+              <div className="dashboard-hero__metric">
+                <Typography.Text type="secondary">可动用资产</Typography.Text>
+                <Typography.Text strong>{displayMoney(summary.liquid_assets, amountsHidden)}</Typography.Text>
+              </div>
+              <div className="dashboard-hero__metric">
+                <Typography.Text type="secondary">投资市值</Typography.Text>
+                <Typography.Text strong>{displayMoney(summary.holding_value, amountsHidden)}</Typography.Text>
+              </div>
+              <div className="dashboard-hero__metric">
+                <Typography.Text type="secondary">持仓盈亏</Typography.Text>
+                <Typography.Text strong className={summary.holding_profit >= 0 ? "profit-positive" : "profit-negative"}>
+                  {displayMoney(summary.holding_profit, amountsHidden)}
+                </Typography.Text>
+              </div>
+            </div>
+          </div>
+        </Card>
 
-      <div className="dashboard-grid dashboard-grid--3">
         <Card
-          className="stat-card dashboard-panel"
+          className="stat-card dashboard-panel dashboard-panel--cashflow"
           title="本月收支"
           extra={<Button type="link" onClick={() => navigate("/transactions")}>明细</Button>}
         >
@@ -253,28 +251,17 @@ export default function DashboardPage() {
             )}
           </div>
         </Card>
-
-        <Card
-          className="stat-card dashboard-panel"
-          title="本月概览"
-          extra={<Button type="link" onClick={() => navigate("/reports")}>报表</Button>}
-        >
-          <div className="dashboard-panel__body">
-            <div className="dashboard-metric-pair">
-              <Statistic title="持仓数量" value={summary.holding_count} suffix="个" />
-              <Statistic title="本月记账" value={summary.transaction_count} suffix="笔" />
-            </div>
-            <div className="dashboard-panel__footer">
-              <Typography.Text type="secondary">储蓄率</Typography.Text>
-              <Typography.Text strong style={{ fontSize: 18 }}>
-                {savingsRate !== null ? `${savingsRate}%` : "—"}
-              </Typography.Text>
-            </div>
-          </div>
-        </Card>
       </div>
 
-      <Card className="stat-card" title="近 6 个月收支趋势" style={{ marginTop: 16 }}>
+      <Card
+        className="stat-card dashboard-trend"
+        title="近 6 个月收支趋势"
+        extra={
+          <Typography.Text type="secondary" className="dashboard-trend__meta">
+            已记账 {summary.transaction_count} 笔 · 储蓄率 {savingsRate !== null ? `${savingsRate}%` : "—"}
+          </Typography.Text>
+        }
+      >
         <ReactECharts option={trendOption} style={{ height: 320 }} />
       </Card>
     </div>

@@ -7,14 +7,16 @@ use commands::holdings::refresh_all_quotes;
 use commands::recurring::process_recurring_rules;
 use commands::settings::should_refresh_on_startup;
 use db::init_db;
+use services::quant_cache::QuantMarketCache;
 use services::scheduler::start_quote_scheduler;
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
+    pub quant_market_cache: Arc<Mutex<QuantMarketCache>>,
 }
 
 fn register_global_shortcuts(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -38,6 +40,7 @@ pub fn run() {
             let conn = init_db(app.handle()).map_err(|e| e.to_string())?;
             app.manage(AppState {
                 db: Mutex::new(conn),
+                quant_market_cache: Arc::new(Mutex::new(QuantMarketCache::default())),
             });
             start_quote_scheduler(app.handle().clone());
 
@@ -117,6 +120,7 @@ pub fn run() {
             commands::refresh_screener,
             commands::get_screener_refresh_schedule,
             commands::add_screener_result_to_watchlist,
+            commands::list_ai_models_command,
             commands::parse_transaction_nl_command,
         ])
         .run(tauri::generate_context!())

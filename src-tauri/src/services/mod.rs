@@ -1,5 +1,6 @@
 pub mod ai_parser;
 pub mod quant;
+pub mod quant_cache;
 pub mod quote;
 pub mod scheduler;
 pub mod screener;

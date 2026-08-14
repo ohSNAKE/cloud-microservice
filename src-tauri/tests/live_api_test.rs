@@ -33,6 +33,55 @@ async fn live_fetch_stock_kline() {
 }
 
 #[tokio::test]
+async fn live_fetch_stock_kline_002796() {
+    let bars = finance_assistant_lib::services::quote::fetch_stock_kline("002796", "day", 21)
+        .await
+        .expect("fetch 002796 stock kline");
+    assert!(
+        bars.len() >= 21,
+        "expected at least 21 bars, got {}",
+        bars.len()
+    );
+    assert!(bars[0].close > 0.0);
+    println!(
+        "002796 kline bars: {}, latest: {}",
+        bars.len(),
+        bars.last().unwrap().date
+    );
+}
+
+#[tokio::test]
+async fn live_fetch_stock_five_minute_kline_002796() {
+    let bars = finance_assistant_lib::services::quote::fetch_stock_kline("002796", "5m", 260)
+        .await
+        .expect("fetch 002796 5m stock kline");
+    assert!(!bars.is_empty(), "5m kline should not be empty");
+    assert!(bars.last().unwrap().close > 0.0);
+    println!(
+        "002796 5m kline bars: {}, latest: {} close {}",
+        bars.len(),
+        bars.last().unwrap().date,
+        bars.last().unwrap().close
+    );
+}
+
+#[tokio::test]
+async fn live_fetch_stock_realtime_quote_002796() {
+    let quote = finance_assistant_lib::services::quote::fetch_stock_realtime_quote("002796", "cn")
+        .await
+        .expect("fetch 002796 realtime quote");
+    assert!(quote.price > 0.0, "quote price should be positive");
+    assert!(
+        quote.exchange_timestamp.is_some() || quote.market_status.is_some(),
+        "quote should include timestamp or market status"
+    );
+    println!(
+        "002796 quote: price {}, ts {:?}, status {:?}",
+        quote.price, quote.exchange_timestamp, quote.market_status
+    );
+}
+
+#[tokio::test]
 async fn live_fetch_fund_kline() {
     let bars = finance_assistant_lib::services::quote::fetch_fund_kline("000001", 30)
         .await

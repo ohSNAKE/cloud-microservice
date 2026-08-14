@@ -93,6 +93,61 @@ pub fn persist_failed_attempt(
     read_screener_dashboard(conn)
 }
 
+/// Load cached actual controllers keyed by (code, exchange), preferring the most
+/// recent valuation_date so a stock's controller is reused across days.
+pub fn load_actual_controller_cache(
+    conn: &Connection,
+) -> Result<std::collections::HashMap<(String, String), String>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT code, exchange, actual_controller FROM screener_actual_controllers ac
+             WHERE valuation_date = (
+               SELECT MAX(valuation_date) FROM screener_actual_controllers
+               WHERE code = ac.code AND exchange = ac.exchange
+             )",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+    let mut cache = std::collections::HashMap::new();
+    for row in rows {
+        let ((code, exchange), controller) = row.map_err(|error| error.to_string())?;
+        cache.insert((code, exchange), controller);
+    }
+    Ok(cache)
+}
+
+pub fn save_actual_controllers(
+    conn: &Connection,
+    valuation_date: &str,
+    controllers: &[(String, String, String)],
+) -> Result<(), String> {
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    let observed_at = chrono::Utc::now().to_rfc3339();
+    for (code, exchange, controller) in controllers {
+        if controller.trim().is_empty() {
+            continue;
+        }
+        tx.execute(
+            "INSERT OR REPLACE INTO screener_actual_controllers
+             (code, exchange, valuation_date, actual_controller, observed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![code, exchange, valuation_date, controller, observed_at],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 pub fn read_screener_dashboard(conn: &Connection) -> Result<ScreenerDashboard, String> {
     let displayed_run = conn
         .query_row(
@@ -108,7 +163,10 @@ pub fn read_screener_dashboard(conn: &Connection) -> Result<ScreenerDashboard, S
         .query_row(
             "SELECT id, status, started_at, completed_at, candidate_count, match_count,
                     skipped_count, failure_code, failure_message
-             FROM screener_runs WHERE status = 'failed' ORDER BY id DESC LIMIT 1",
+             FROM screener_runs
+             WHERE status = 'failed'
+               AND id > (SELECT COALESCE(MAX(id), 0) FROM screener_runs WHERE status IN ('success', 'partial'))
+             ORDER BY id DESC LIMIT 1",
             [],
             map_run,
         )
@@ -264,6 +322,51 @@ mod tests {
         let dashboard = read_screener_dashboard(&conn).unwrap();
         assert_eq!(dashboard.displayed_run.unwrap().status, "partial");
         assert_eq!(dashboard.results.len(), 1);
+    }
+
+    #[test]
+    fn controller_cache_round_trips_by_code_and_exchange() {
+        let conn = setup_screener_schema();
+        save_actual_controllers(
+            &conn,
+            "2026-07-21",
+            &[
+                (
+                    "600001".to_string(),
+                    "sh".to_string(),
+                    "中国移动通信集团有限公司".to_string(),
+                ),
+                (
+                    "000002".to_string(),
+                    "sz".to_string(),
+                    "民营企业".to_string(),
+                ),
+            ],
+        )
+        .unwrap();
+
+        let cache = load_actual_controller_cache(&conn).unwrap();
+
+        assert_eq!(
+            cache.get(&("600001".to_string(), "sh".to_string())),
+            Some(&"中国移动通信集团有限公司".to_string())
+        );
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn successful_run_after_failure_clears_failed_attempt_and_is_not_stale() {
+        let conn = setup_screener_schema();
+        persist_failed_attempt(&conn, "provider_unavailable", "选股刷新失败：dash").unwrap();
+        persist_completed_run(
+            &conn,
+            run("success", "2026-07-22T01:00:00Z"),
+            vec![result("600001")],
+        )
+        .unwrap();
+        let dashboard = read_screener_dashboard(&conn).unwrap();
+        assert!(!dashboard.is_stale);
+        assert!(dashboard.latest_failed_attempt.is_none());
     }
 
     #[test]

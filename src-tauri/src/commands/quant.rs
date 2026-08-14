@@ -9,6 +9,11 @@ use crate::services::quant::{
     completed_intraday_bars, decide_guarded_intraday_t_signal, decide_signal, dedupe_key,
     generate_grid_zones, intraday_t_day_position, is_trading_time, next_refresh_at,
     quote_is_intraday_t_realtime, quote_is_strictly_realtime, IntradayTSignalInput,
+    IntradayTWindowStats,
+};
+use crate::services::quant_cache::{
+    get_or_fetch_daily, get_or_fetch_intraday, DailyHistoryKey, IntradayHistoryKey,
+    QuantMarketCache,
 };
 use crate::services::quote::{
     fetch_stock_kline, fetch_stock_realtime_quote, lookup_stock_name, RealtimeStockQuote,
@@ -17,7 +22,9 @@ use crate::AppState;
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Arc;
 use tauri::State;
+use tokio::sync::Semaphore;
 
 #[derive(Clone)]
 pub struct QuantMarketSnapshot {
@@ -25,6 +32,7 @@ pub struct QuantMarketSnapshot {
     market: String,
     daily_bars: Result<Vec<KlineBar>, String>,
     minute_bars: Result<Vec<KlineBar>, String>,
+    intraday_stats: Option<IntradayTWindowStats>,
     realtime_quote: Result<RealtimeStockQuote, String>,
 }
 
@@ -32,8 +40,12 @@ pub struct QuantMarketSnapshot {
 struct QuantSnapshotRequest {
     code: String,
     market: String,
+    trading_date: String,
     daily_limit: i64,
     minute_limit: Option<i64>,
+    intraday_lookback_days: Option<usize>,
+    intraday_high_time_min_count: Option<usize>,
+    intraday_low_time_min_count: Option<usize>,
 }
 
 const DEFAULT_MA_SHORT: usize = 5;
@@ -47,6 +59,7 @@ const DEFAULT_SELL_T_POSITION_THRESHOLD: f64 = 0.70;
 const DEFAULT_BUYBACK_POSITION_THRESHOLD: f64 = 0.30;
 const INTRADAY_T_MIN_RANGE: f64 = 0.0001;
 const SUPPORTED_QUANT_MARKET: &str = "cn";
+const QUANT_SNAPSHOT_CONCURRENCY: usize = 4;
 
 fn ensure_supported_quant_market(market: &str) -> Result<(), String> {
     if market == SUPPORTED_QUANT_MARKET {
@@ -772,13 +785,15 @@ pub fn build_quant_dashboard_with_snapshots(
                     continue;
                 }
             };
-            let stats = analyze_intraday_t_windows(
-                minute_bars,
-                &current_date,
-                settings.intraday_lookback_days,
-                settings.intraday_high_time_min_count,
-                settings.intraday_low_time_min_count,
-            );
+            let stats = snapshot.intraday_stats.clone().unwrap_or_else(|| {
+                analyze_intraday_t_windows(
+                    minute_bars,
+                    &current_date,
+                    settings.intraday_lookback_days,
+                    settings.intraday_high_time_min_count,
+                    settings.intraday_low_time_min_count,
+                )
+            });
             target.intraday_high_frequency_windows = stats.high_frequency_windows.clone();
             target.intraday_low_frequency_windows = stats.low_frequency_windows.clone();
             Some(stats)
@@ -1075,6 +1090,8 @@ fn should_fetch_intraday_minute_bars(strategy_mode: &str) -> bool {
 async fn load_live_quant_snapshots(
     state: &State<'_, AppState>,
 ) -> Result<Vec<QuantMarketSnapshot>, String> {
+    let now = china_market_now();
+    let trading_date = now.format("%Y-%m-%d").to_string();
     let requests = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let targets = merge_quant_targets_read_only(&conn)?;
@@ -1083,33 +1100,91 @@ async fn load_live_quant_snapshots(
         for target in targets.into_iter().filter(|target| target.enabled) {
             let settings = load_quant_strategy_settings_row(&conn, &target.code, &target.market)?;
             let limit = settings.ma_long.max(settings.grid_lookback_days) as i64 + 1;
-            let minute_limit = if settings.strategy_mode == "intraday_t" {
-                Some((settings.intraday_lookback_days * 60) as i64)
-            } else {
-                None
-            };
+            let fetch_intraday_history = should_fetch_intraday_minute_bars(&settings.strategy_mode);
+            let minute_limit =
+                fetch_intraday_history.then_some((settings.intraday_lookback_days * 60) as i64);
             requests.push(QuantSnapshotRequest {
                 code: target.code,
                 market: target.market,
+                trading_date: trading_date.clone(),
                 daily_limit: limit,
                 minute_limit,
+                intraday_lookback_days: fetch_intraday_history
+                    .then_some(settings.intraday_lookback_days),
+                intraday_high_time_min_count: fetch_intraday_history
+                    .then_some(settings.intraday_high_time_min_count),
+                intraday_low_time_min_count: fetch_intraday_history
+                    .then_some(settings.intraday_low_time_min_count),
             });
         }
 
         requests
     };
 
-    Ok(fetch_quant_snapshots_concurrently(requests, fetch_live_quant_snapshot).await)
+    let cache = Arc::clone(&state.quant_market_cache);
+    Ok(
+        fetch_quant_snapshots_concurrently(requests, move |request| {
+            fetch_live_quant_snapshot(request, Arc::clone(&cache))
+        })
+        .await,
+    )
 }
 
-async fn fetch_live_quant_snapshot(request: QuantSnapshotRequest) -> QuantMarketSnapshot {
-    let daily_bars = fetch_stock_kline(&request.code, "day", request.daily_limit).await;
+async fn fetch_live_quant_snapshot(
+    request: QuantSnapshotRequest,
+    cache: Arc<std::sync::Mutex<QuantMarketCache>>,
+) -> QuantMarketSnapshot {
+    let daily_key = DailyHistoryKey::new(
+        &request.code,
+        &request.market,
+        &request.trading_date,
+        request.daily_limit,
+    );
+    let daily_bars = get_or_fetch_daily(&cache, daily_key, || {
+        fetch_stock_kline(&request.code, "day", request.daily_limit)
+    })
+    .await;
     let realtime_quote = fetch_stock_realtime_quote(&request.code, &request.market).await;
-    let minute_bars = match request.minute_limit {
-        Some(limit) if should_fetch_intraday_minute_bars("intraday_t") => {
-            fetch_stock_kline(&request.code, "5m", limit).await
+    let intraday = match (
+        request.minute_limit,
+        request.intraday_lookback_days,
+        request.intraday_high_time_min_count,
+        request.intraday_low_time_min_count,
+    ) {
+        (Some(limit), Some(lookback_days), Some(high_min_count), Some(low_min_count)) => {
+            let key = IntradayHistoryKey::new(
+                &request.code,
+                &request.market,
+                &request.trading_date,
+                lookback_days,
+                high_min_count,
+                low_min_count,
+            );
+            get_or_fetch_intraday(
+                &cache,
+                key,
+                || fetch_stock_kline(&request.code, "5m", limit),
+                |bars| {
+                    analyze_intraday_t_windows(
+                        bars,
+                        &request.trading_date,
+                        lookback_days,
+                        high_min_count,
+                        low_min_count,
+                    )
+                },
+            )
+            .await
         }
-        _ => Ok(vec![]),
+        _ => Ok(crate::services::quant_cache::IntradayHistoryEntry {
+            bars: vec![],
+            stats: IntradayTWindowStats::default(),
+        }),
+    };
+
+    let (minute_bars, intraday_stats) = match intraday {
+        Ok(entry) => (Ok(entry.bars), request.minute_limit.map(|_| entry.stats)),
+        Err(err) => (Err(err), None),
     };
 
     QuantMarketSnapshot {
@@ -1117,6 +1192,7 @@ async fn fetch_live_quant_snapshot(request: QuantSnapshotRequest) -> QuantMarket
         market: request.market,
         daily_bars,
         minute_bars,
+        intraday_stats,
         realtime_quote,
     }
 }
@@ -1126,12 +1202,18 @@ async fn fetch_quant_snapshots_concurrently<F, Fut>(
     fetch: F,
 ) -> Vec<QuantMarketSnapshot>
 where
-    F: Fn(QuantSnapshotRequest) -> Fut + Copy + Send + Sync + 'static,
+    F: Fn(QuantSnapshotRequest) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = QuantMarketSnapshot> + Send + 'static,
 {
     let mut handles = Vec::with_capacity(requests.len());
+    let semaphore = Arc::new(Semaphore::new(QUANT_SNAPSHOT_CONCURRENCY));
     for request in requests {
-        handles.push(tokio::spawn(fetch(request)));
+        let semaphore = Arc::clone(&semaphore);
+        let fetch = fetch.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = semaphore.acquire_owned().await.expect("semaphore is open");
+            fetch(request).await
+        }));
     }
 
     let mut snapshots = Vec::with_capacity(handles.len());
@@ -1912,6 +1994,7 @@ mod tests {
             market: market.to_string(),
             daily_bars,
             minute_bars: Ok(vec![]),
+            intraday_stats: None,
             realtime_quote,
         }
     }
@@ -1928,6 +2011,7 @@ mod tests {
             market: "cn".to_string(),
             daily_bars: Ok(daily_bars),
             minute_bars,
+            intraday_stats: None,
             realtime_quote: Ok(realtime_quote_with_status(
                 price,
                 Some(now.timestamp()),
@@ -2281,6 +2365,7 @@ mod tests {
                 market: "cn".to_string(),
                 daily_bars: Ok(bullish_daily_bars()),
                 minute_bars: Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                intraday_stats: None,
                 realtime_quote: Ok(realtime_quote_with_status(
                     11.6,
                     Some(exchange_timestamp(2026, 7, 6, 9, 35, 0)),
@@ -2315,6 +2400,7 @@ mod tests {
                 market: "cn".to_string(),
                 daily_bars: Err("daily history failed".to_string()),
                 minute_bars: Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+                intraday_stats: None,
                 realtime_quote: Ok(realtime_quote_with_status(
                     11.6,
                     Some(now.timestamp()),
@@ -2887,6 +2973,7 @@ mod tests {
             market: "cn".to_string(),
             daily_bars: Ok(bullish_daily_bars()),
             minute_bars: Ok(intraday_t_minute_bars("09:35", "13:40", 10, 10.0, 12.0)),
+            intraday_stats: None,
             realtime_quote: Ok(realtime_quote_with_status(
                 11.6,
                 Some(exchange_timestamp(2026, 7, 6, 9, 35, 0)),
@@ -3094,20 +3181,32 @@ mod tests {
             QuantSnapshotRequest {
                 code: "000201".to_string(),
                 market: "cn".to_string(),
+                trading_date: "2026-07-14".to_string(),
                 daily_limit: 21,
                 minute_limit: None,
+                intraday_lookback_days: None,
+                intraday_high_time_min_count: None,
+                intraday_low_time_min_count: None,
             },
             QuantSnapshotRequest {
                 code: "000202".to_string(),
                 market: "cn".to_string(),
+                trading_date: "2026-07-14".to_string(),
                 daily_limit: 21,
                 minute_limit: None,
+                intraday_lookback_days: None,
+                intraday_high_time_min_count: None,
+                intraday_low_time_min_count: None,
             },
             QuantSnapshotRequest {
                 code: "000203".to_string(),
                 market: "cn".to_string(),
+                trading_date: "2026-07-14".to_string(),
                 daily_limit: 21,
                 minute_limit: None,
+                intraday_lookback_days: None,
+                intraday_high_time_min_count: None,
+                intraday_low_time_min_count: None,
             },
         ];
 
@@ -3119,6 +3218,7 @@ mod tests {
                 market: request.market,
                 daily_bars: Ok(bullish_daily_bars()),
                 minute_bars: Ok(vec![]),
+                intraday_stats: None,
                 realtime_quote: Ok(realtime_quote(10.0)),
             }
         })
@@ -3130,6 +3230,53 @@ mod tests {
             "expected concurrent fetches, took {:?}",
             start.elapsed()
         );
+    }
+
+    #[tokio::test]
+    async fn quant_snapshot_fetches_respect_concurrency_limit() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let requests = (0..6)
+            .map(|index| QuantSnapshotRequest {
+                code: format!("0002{index:02}"),
+                market: "cn".to_string(),
+                trading_date: "2026-07-14".to_string(),
+                daily_limit: 21,
+                minute_limit: None,
+                intraday_lookback_days: None,
+                intraday_high_time_min_count: None,
+                intraday_low_time_min_count: None,
+            })
+            .collect();
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let fetch_active = Arc::clone(&active);
+        let fetch_max_active = Arc::clone(&max_active);
+
+        let snapshots = fetch_quant_snapshots_concurrently(requests, move |request| {
+            let active = Arc::clone(&fetch_active);
+            let max_active = Arc::clone(&fetch_max_active);
+            async move {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                max_active.fetch_max(current, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                active.fetch_sub(1, Ordering::SeqCst);
+                QuantMarketSnapshot {
+                    code: request.code,
+                    market: request.market,
+                    daily_bars: Ok(bullish_daily_bars()),
+                    minute_bars: Ok(vec![]),
+                    intraday_stats: None,
+                    realtime_quote: Ok(realtime_quote(10.0)),
+                }
+            }
+        })
+        .await;
+
+        assert_eq!(snapshots.len(), 6);
+        assert!(max_active.load(Ordering::SeqCst) <= 4);
     }
 
     #[test]

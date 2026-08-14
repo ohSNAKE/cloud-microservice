@@ -29,6 +29,10 @@ export function screenerState(dashboard: ScreenerDashboard): ScreenerViewState {
   return dashboard.results.length === 0 ? "no-match" : "ready";
 }
 
+export function shouldShowRefreshSuccess(dashboard: ScreenerDashboard): boolean {
+  return dashboard.displayed_run?.status === "success" && !dashboard.latest_failed_attempt;
+}
+
 export function formatCnyBillion(value: number): string {
   return `${(value / 100_000_000).toFixed(2)}亿`;
 }

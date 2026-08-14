@@ -534,6 +534,28 @@ pub struct ScreenerWatchlistAddResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BudgetBackupRow {
+    pub id: i64,
+    pub category_id: i64,
+    pub month: String,
+    pub amount: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RecurringRuleBackupRow {
+    pub id: i64,
+    pub r#type: String,
+    pub amount: f64,
+    pub category_id: Option<i64>,
+    pub account_id: Option<i64>,
+    pub note: String,
+    pub day_of_month: i64,
+    pub enabled: bool,
+    pub last_run_month: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportPayload {
     pub version: String,
     pub exported_at: String,
@@ -542,6 +564,10 @@ pub struct ExportPayload {
     pub transactions: Vec<TransactionRow>,
     pub holdings: Vec<HoldingRow>,
     pub settings: Vec<(String, String)>,
+    #[serde(default)]
+    pub budgets: Vec<BudgetBackupRow>,
+    #[serde(default)]
+    pub recurring_rules: Vec<RecurringRuleBackupRow>,
     #[serde(default)]
     pub quant_watchlist: Vec<QuantWatchlistRow>,
     #[serde(default)]

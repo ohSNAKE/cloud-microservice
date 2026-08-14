@@ -133,6 +133,8 @@ export const api = {
 
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),
+  listAiModels: (apiBase: string, apiKey: string) =>
+    invoke<string[]>("list_ai_models_command", { apiBase, apiKey }),
 
   getAppLockStatus: () => invoke<AppLockStatus>("get_app_lock_status"),
   setupAppLock: (password: string) => invoke<void>("setup_app_lock", { password }),

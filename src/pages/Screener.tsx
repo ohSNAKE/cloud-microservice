@@ -13,6 +13,7 @@ import {
   formatNullableNumber,
   formatPercentValue,
   screenerState,
+  shouldShowRefreshSuccess,
   smallestDistance,
 } from "./screenerView";
 
@@ -64,7 +65,13 @@ export default function ScreenerPage() {
       if (!mountedRef.current) return;
       setDashboard(next);
       setError(null);
-      if (showSuccess) message.success("选股结果已刷新");
+      if (showSuccess) {
+        if (shouldShowRefreshSuccess(next)) {
+          message.success("选股结果已刷新");
+        } else {
+          message.warning(next.latest_failed_attempt?.failure_summary?.message ?? "刷新未生成新的选股结果");
+        }
+      }
     } catch (nextError) {
       if (!mountedRef.current) return;
       setError(formatInvokeError(nextError));

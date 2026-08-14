@@ -1,13 +1,19 @@
 use crate::services::screener::{
     CentralControllerRegistry, NormalizedDividend, NormalizedKline, ScreenerPeriod,
 };
-use crate::services::screener_source_eastmoney_universe::{
-    classify_controller, collect_exchange_pages, validate_complete_universe, EastmoneyUniversePage,
-    EastmoneyUniverseRow,
+use crate::services::screener_source_eastmoney_market::{
+    build_dividend_url, build_kline_url, build_quote_url, parse_dividend_json, parse_kline_json,
+    parse_quote_json,
 };
-use crate::services::screener_source_sasac::{parse_sasac_directory, SASAC_DIRECTORY_URL};
+use crate::services::screener_source_eastmoney_universe::{
+    build_actual_controller_url, build_universe_page_url, classify_controller,
+    collect_exchange_pages, parse_actual_controller_json, parse_universe_page_json,
+    validate_complete_universe,
+};
+use crate::services::screener_source_sasac::{
+    embedded_central_controller_entries, parse_sasac_directory, SASAC_DIRECTORY_URL,
+};
 use chrono::NaiveDate;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ControllerClassification {
@@ -101,6 +107,7 @@ pub trait ScreenerSource {
 pub struct EastmoneyScreenerSource<EastmoneyGetter, SasacGetter> {
     eastmoney_getter: EastmoneyGetter,
     sasac_getter: SasacGetter,
+    controller_cache: std::collections::HashMap<(String, String), String>,
 }
 
 impl<EastmoneyGetter, SasacGetter> EastmoneyScreenerSource<EastmoneyGetter, SasacGetter>
@@ -112,6 +119,19 @@ where
         Self {
             eastmoney_getter,
             sasac_getter,
+            controller_cache: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn with_getters_and_controller_cache(
+        eastmoney_getter: EastmoneyGetter,
+        sasac_getter: SasacGetter,
+        controller_cache: std::collections::HashMap<(String, String), String>,
+    ) -> Self {
+        Self {
+            eastmoney_getter,
+            sasac_getter,
+            controller_cache,
         }
     }
 
@@ -120,25 +140,32 @@ where
         exchange: &str,
         registry: &CentralControllerRegistry,
     ) -> Result<Vec<ScreenerUniverseRecord>, String> {
-        let payload = (self.eastmoney_getter)(&format!("universe:{exchange}"))?;
-        let mut controllers = HashMap::new();
-        let rows = payload
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| parse_universe_line(exchange, line, &mut controllers))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut records = collect_exchange_pages(
-            exchange,
-            vec![EastmoneyUniversePage {
-                total_pages: 1,
-                page_no: 1,
-                rows,
-            }],
-        )?;
+        let page_size = 100;
+        let first_url = build_universe_page_url(exchange, 1, page_size)?;
+        let first_payload = (self.eastmoney_getter)(&first_url)?;
+        let first_page = parse_universe_page_json(exchange, 1, page_size, &first_payload)?;
+        let total_pages = first_page.total_pages;
+        let mut pages = vec![first_page];
+        for page_no in 2..=total_pages {
+            let url = build_universe_page_url(exchange, page_no, page_size)?;
+            let payload = (self.eastmoney_getter)(&url)?;
+            pages.push(parse_universe_page_json(
+                exchange, page_no, page_size, &payload,
+            )?);
+        }
+        let mut records = collect_exchange_pages(exchange, pages)?;
         for record in &mut records {
-            let actual_controller = controllers
-                .remove(&(record.code.clone(), record.exchange.clone()))
-                .unwrap_or_default();
+            if record.market_cap_cny < 50_000_000_000.0 {
+                continue;
+            }
+            let cache_key = (record.code.clone(), record.exchange.clone());
+            let actual_controller = match self.controller_cache.get(&cache_key) {
+                Some(cached) => cached.clone(),
+                None => build_actual_controller_url(&record.code, &record.exchange)
+                    .and_then(|url| (self.eastmoney_getter)(&url))
+                    .and_then(|payload| parse_actual_controller_json(&payload))
+                    .unwrap_or_default(),
+            };
             record.controller_classification = classify_controller(&actual_controller, registry);
             record.actual_controller = actual_controller;
         }
@@ -156,14 +183,24 @@ where
         &self,
         valuation_date: NaiveDate,
     ) -> Result<CentralControllerRegistrySnapshot, String> {
-        let html = (self.sasac_getter)(SASAC_DIRECTORY_URL)?;
-        let snapshot = parse_sasac_directory(&valuation_date.to_string(), &html)?;
-        Ok(CentralControllerRegistrySnapshot {
-            valuation_date,
-            registry: CentralControllerRegistry::from_entries(snapshot.entries),
-            source_url: snapshot.source_url,
-            source_date: snapshot.source_date,
-        })
+        match (self.sasac_getter)(SASAC_DIRECTORY_URL)
+            .and_then(|html| parse_sasac_directory(&valuation_date.to_string(), &html))
+        {
+            Ok(snapshot) => Ok(CentralControllerRegistrySnapshot {
+                valuation_date,
+                registry: CentralControllerRegistry::from_entries(snapshot.entries),
+                source_url: snapshot.source_url,
+                source_date: snapshot.source_date,
+            }),
+            Err(_) => Ok(CentralControllerRegistrySnapshot {
+                valuation_date,
+                registry: CentralControllerRegistry::from_entries(
+                    embedded_central_controller_entries(),
+                ),
+                source_url: "embedded:sasac-central-enterprises".into(),
+                source_date: valuation_date.to_string(),
+            }),
+        }
     }
 
     fn fetch_universe(
@@ -180,60 +217,31 @@ where
 
     fn fetch_dividends(
         &self,
-        _code: &str,
-        _exchange: &str,
+        code: &str,
+        exchange: &str,
         _year: i32,
         _valuation_date: NaiveDate,
     ) -> Result<Vec<NormalizedDividend>, String> {
-        Err("Eastmoney dividend transport is not wired yet".into())
+        let payload = (self.eastmoney_getter)(&build_dividend_url(code))?;
+        parse_dividend_json(code, exchange, &payload)
     }
 
-    fn fetch_quote(&self, _code: &str, _exchange: &str) -> Result<NormalizedQuote, String> {
-        Err("Eastmoney quote transport is not wired yet".into())
+    fn fetch_quote(&self, code: &str, exchange: &str) -> Result<NormalizedQuote, String> {
+        let url = build_quote_url(code, exchange)?;
+        let payload = (self.eastmoney_getter)(&url)?;
+        parse_quote_json(code, exchange, &payload)
     }
 
     fn fetch_klines(
         &self,
-        _code: &str,
-        _exchange: &str,
-        _period: ScreenerPeriod,
+        code: &str,
+        exchange: &str,
+        period: ScreenerPeriod,
     ) -> Result<Vec<NormalizedKline>, String> {
-        Err("Eastmoney kline transport is not wired yet".into())
+        let url = build_kline_url(code, exchange, period)?;
+        let payload = (self.eastmoney_getter)(&url)?;
+        parse_kline_json(code, exchange, period, &payload)
     }
-}
-
-fn parse_universe_line(
-    expected_exchange: &str,
-    line: &str,
-    controllers: &mut HashMap<(String, String), String>,
-) -> Result<EastmoneyUniverseRow, String> {
-    let parts = line.split('|').collect::<Vec<_>>();
-    if parts.len() != 6 {
-        return Err("universe row must contain six fields".into());
-    }
-    let code = parts[0].trim().to_string();
-    let name = parts[1].trim().to_string();
-    let market_cap_cny = parts[2]
-        .trim()
-        .parse::<f64>()
-        .map_err(|error| error.to_string())?;
-    let exchange = parts[3].trim().to_string();
-    if exchange != expected_exchange {
-        return Err("universe row exchange mismatch".into());
-    }
-    let eastmoney_secid = parts[4].trim().to_string();
-    controllers.insert(
-        (code.clone(), exchange.clone()),
-        parts[5].trim().to_string(),
-    );
-
-    Ok(EastmoneyUniverseRow {
-        code,
-        name,
-        market_cap_cny,
-        market: exchange,
-        eastmoney_secid,
-    })
 }
 
 #[cfg(test)]
@@ -245,13 +253,37 @@ mod tests {
     }
 
     fn fake_eastmoney_getter() -> impl Fn(&str) -> Result<String, String> + Clone {
-        |key| match key {
-            "universe:sh" => {
-                Ok("600001|测试上海|50000000000|sh|1.600001|中国移动通信集团有限公司".into())
+        |url| {
+            if url.contains("fs=m:1+t:2") {
+                return Ok(r#"{"data":{"total":1,"diff":[{"f12":"600001","f14":"测试上海","f20":50000000000}]}}"#.into());
             }
-            "universe:sz" => Ok("000001|测试深圳|50000000000|sz|0.000001|民营企业".into()),
-            "universe:bj" => Ok("830001|测试北交|50000000000|bj|0.830001|某市国资委".into()),
-            _ => Err(format!("unexpected eastmoney key {key}")),
+            if url.contains("fs=m:0+t:6") {
+                return Ok(r#"{"data":{"total":1,"diff":[{"f12":"000001","f14":"测试深圳","f20":50000000000}]}}"#.into());
+            }
+            if url.contains("fs=m:0+t:81") {
+                return Ok(r#"{"data":{"total":1,"diff":[{"f12":"830001","f14":"测试北交","f20":50000000000}]}}"#.into());
+            }
+            if url.contains("SECUCODE%3D%22600001.SH%22") {
+                return Ok(
+                    r#"{"result":{"data":[{"ACTUAL_HOLDER":"中国移动通信集团有限公司"}]}}"#.into(),
+                );
+            }
+            if url.contains("SECUCODE%3D%22000001.SZ%22") {
+                return Ok(r#"{"result":{"data":[{"ACTUAL_HOLDER":"民营企业"}]}}"#.into());
+            }
+            if url.contains("SECUCODE%3D%22830001.BJ%22") {
+                return Ok(r#"{"result":{"data":[{"ACTUAL_HOLDER":"某市国资委"}]}}"#.into());
+            }
+            if url.contains("stock/get?secid=1.600001") {
+                return Ok(r#"{"data":{"f43":1010,"f124":1784707200}}"#.into());
+            }
+            if url.contains("kline/get?secid=1.600001") {
+                return Ok(r#"{"data":{"klines":["2026-07-01,10,10,10,10,1"]}}"#.into());
+            }
+            if url.contains("RPT_SHAREBONUS_DET") {
+                return Ok(r#"{"result":{"data":[{"PRETAX_BONUS_RMB":6.0,"EX_DIVIDEND_DATE":"2025-06-01 00:00:00","ASSIGN_PROGRESS":"实施分配"}]}}"#.into());
+            }
+            Err(format!("unexpected eastmoney URL {url}"))
         }
     }
 
@@ -259,15 +291,97 @@ mod tests {
         |_| Ok(r#"<article><a>中国移动通信集团有限公司</a></article>"#.into())
     }
 
+    fn failing_sasac_getter() -> impl Fn(&str) -> Result<String, String> + Clone {
+        |_| Err("sasac unavailable".into())
+    }
+
     #[test]
     fn concrete_source_combines_registry_universe_profile_and_market_clients() {
         let source =
             EastmoneyScreenerSource::with_getters(fake_eastmoney_getter(), fake_sasac_getter());
         let records = source.fetch_universe(naive_date("2026-07-21")).unwrap();
+        let central = records
+            .iter()
+            .find(|record| record.code == "600001")
+            .unwrap();
         assert_eq!(
-            records[0].controller_classification,
+            central.controller_classification,
             ControllerClassification::CentralSoe
         );
-        assert_eq!(records[0].actual_controller, "中国移动通信集团有限公司");
+        assert_eq!(central.actual_controller, "中国移动通信集团有限公司");
+    }
+
+    #[test]
+    fn concrete_source_fetches_market_records() {
+        let source =
+            EastmoneyScreenerSource::with_getters(fake_eastmoney_getter(), fake_sasac_getter());
+
+        assert_eq!(source.fetch_quote("600001", "sh").unwrap().price, 10.1);
+        assert_eq!(
+            source
+                .fetch_klines("600001", "sh", ScreenerPeriod::Day)
+                .unwrap()[0]
+                .close,
+            10.0
+        );
+        assert_eq!(
+            source
+                .fetch_dividends("600001", "sh", 2025, naive_date("2026-07-21"))
+                .unwrap()[0]
+                .gross_per_current_share,
+            0.6
+        );
+    }
+
+    #[test]
+    fn concrete_source_falls_back_to_embedded_controller_registry() {
+        let source =
+            EastmoneyScreenerSource::with_getters(fake_eastmoney_getter(), failing_sasac_getter());
+
+        let records = source.fetch_universe(naive_date("2026-07-21")).unwrap();
+        let central = records
+            .iter()
+            .find(|record| record.code == "600001")
+            .unwrap();
+
+        assert_eq!(
+            central.controller_classification,
+            ControllerClassification::CentralSoe
+        );
+    }
+
+    fn controller_url_forbidden_getter() -> impl Fn(&str) -> Result<String, String> + Clone {
+        |url: &str| {
+            if url.contains("SECUCODE") {
+                return Err("controller URL must not be fetched when cached".into());
+            }
+            fake_eastmoney_getter()(url)
+        }
+    }
+
+    #[test]
+    fn cached_controller_is_used_without_fetching_controller_url() {
+        let mut cache = std::collections::HashMap::new();
+        cache.insert(
+            ("600001".to_string(), "sh".to_string()),
+            "中国移动通信集团有限公司".to_string(),
+        );
+        let source = EastmoneyScreenerSource::with_getters_and_controller_cache(
+            controller_url_forbidden_getter(),
+            fake_sasac_getter(),
+            cache,
+        );
+
+        let records = source.fetch_universe(naive_date("2026-07-21")).unwrap();
+        let central = records
+            .iter()
+            .find(|record| record.code == "600001")
+            .unwrap();
+
+        assert_eq!(central.actual_controller, "中国移动通信集团有限公司");
+        assert_eq!(
+            central.controller_classification,
+            ControllerClassification::CentralSoe
+        );
     }
 }

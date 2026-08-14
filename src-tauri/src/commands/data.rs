@@ -1,11 +1,18 @@
 use crate::db::{db_path_hint, ensure_screener_schema, now_local};
 use crate::models::{
-    Account, Category, ExportPayload, HoldingRow, QuantIntradayTStateRow, QuantSignalRow,
-    QuantStrategySettingsRow, QuantWatchlistRow, TransactionRow,
+    Account, BudgetBackupRow, Category, ExportPayload, HoldingRow, QuantIntradayTStateRow,
+    QuantSignalRow, QuantStrategySettingsRow, QuantWatchlistRow, RecurringRuleBackupRow,
+    TransactionRow,
 };
 use crate::AppState;
 use rusqlite::{params, Connection};
 use tauri::State;
+
+const DEVICE_LOCAL_SETTING_KEYS: [&str; 3] = ["ai_api_key", "app_lock_enabled", "app_lock_hash"];
+
+fn is_device_local_setting(key: &str) -> bool {
+    DEVICE_LOCAL_SETTING_KEYS.contains(&key)
+}
 
 #[tauri::command]
 pub fn get_db_path(app: tauri::AppHandle) -> Result<String, String> {
@@ -101,7 +108,55 @@ fn export_payload_from_conn(conn: &Connection) -> Result<ExportPayload, String> 
         .prepare("SELECT key, value FROM settings")
         .map_err(|e| e.to_string())?;
     let settings: Vec<(String, String)> = settings_stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|(key, _)| !is_device_local_setting(key))
+        .collect();
+
+    let mut budgets_stmt = conn
+        .prepare("SELECT id, category_id, month, amount FROM budgets ORDER BY id")
+        .map_err(|e| e.to_string())?;
+    let budgets: Vec<BudgetBackupRow> = budgets_stmt
+        .query_map([], |row| {
+            Ok(BudgetBackupRow {
+                id: row.get(0)?,
+                category_id: row.get(1)?,
+                month: row.get(2)?,
+                amount: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut recurring_rules_stmt = conn
+        .prepare(
+            "SELECT id, type, amount, category_id, account_id, note, day_of_month,
+                    enabled, last_run_month, created_at
+             FROM recurring_rules ORDER BY id",
+        )
+        .map_err(|e| e.to_string())?;
+    let recurring_rules: Vec<RecurringRuleBackupRow> = recurring_rules_stmt
+        .query_map([], |row| {
+            let enabled: i64 = row.get(7)?;
+            Ok(RecurringRuleBackupRow {
+                id: row.get(0)?,
+                r#type: row.get(1)?,
+                amount: row.get(2)?,
+                category_id: row.get(3)?,
+                account_id: row.get(4)?,
+                note: row.get(5)?,
+                day_of_month: row.get(6)?,
+                enabled: enabled != 0,
+                last_run_month: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -221,6 +276,8 @@ fn export_payload_from_conn(conn: &Connection) -> Result<ExportPayload, String> 
         transactions,
         holdings,
         settings,
+        budgets,
+        recurring_rules,
         quant_watchlist,
         quant_strategy_settings,
         quant_signals,
@@ -253,6 +310,7 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
          DELETE FROM screener_fundamentals;
          DELETE FROM screener_controller_registry;
          DELETE FROM screener_quotes;
+         DELETE FROM screener_actual_controllers;
          INSERT OR IGNORE INTO screener_state (key, value) VALUES ('generation', '0');
          UPDATE screener_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'generation';
          DELETE FROM quant_intraday_t_state;
@@ -262,9 +320,12 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
          DELETE FROM price_history;
          DELETE FROM transactions;
          DELETE FROM holdings;
+         DELETE FROM budgets;
+         DELETE FROM recurring_rules;
          DELETE FROM categories;
          DELETE FROM accounts;
-         DELETE FROM settings;",
+         DELETE FROM settings
+           WHERE key NOT IN ('ai_api_key', 'app_lock_enabled', 'app_lock_hash');",
     )
     .map_err(|e| e.to_string())?;
 
@@ -319,9 +380,42 @@ fn import_payload_to_conn(conn: &Connection, payload: ExportPayload) -> Result<(
     }
 
     for (key, value) in payload.settings {
+        if is_device_local_setting(&key) {
+            continue;
+        }
         tx.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)",
             params![key, value],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    for budget in payload.budgets {
+        tx.execute(
+            "INSERT INTO budgets (id, category_id, month, amount) VALUES (?1, ?2, ?3, ?4)",
+            params![budget.id, budget.category_id, budget.month, budget.amount],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    for rule in payload.recurring_rules {
+        tx.execute(
+            "INSERT INTO recurring_rules
+             (id, type, amount, category_id, account_id, note, day_of_month, enabled,
+              last_run_month, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                rule.id,
+                rule.r#type,
+                rule.amount,
+                rule.category_id,
+                rule.account_id,
+                rule.note,
+                rule.day_of_month,
+                if rule.enabled { 1 } else { 0 },
+                rule.last_run_month,
+                rule.created_at
+            ],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -474,6 +568,30 @@ mod tests {
                 value TEXT NOT NULL
             );
 
+            CREATE TABLE budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                amount REAL NOT NULL,
+                UNIQUE(category_id, month),
+                FOREIGN KEY (category_id) REFERENCES categories(id)
+            );
+
+            CREATE TABLE recurring_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                category_id INTEGER,
+                account_id INTEGER,
+                note TEXT DEFAULT '',
+                day_of_month INTEGER NOT NULL DEFAULT 1,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_run_month TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (category_id) REFERENCES categories(id),
+                FOREIGN KEY (account_id) REFERENCES accounts(id)
+            );
+
             CREATE TABLE quant_watchlist (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code TEXT NOT NULL,
@@ -590,6 +708,8 @@ mod tests {
             transactions: Vec::new(),
             holdings: Vec::new(),
             settings: Vec::new(),
+            budgets: Vec::new(),
+            recurring_rules: Vec::new(),
             quant_watchlist: Vec::new(),
             quant_strategy_settings: Vec::new(),
             quant_signals: Vec::new(),
@@ -639,10 +759,120 @@ mod tests {
     fn export_payload_accepts_missing_quant_fields() {
         let payload: ExportPayload = serde_json::from_str(old_backup_json()).unwrap();
 
+        assert!(payload.budgets.is_empty());
+        assert!(payload.recurring_rules.is_empty());
         assert!(payload.quant_watchlist.is_empty());
         assert!(payload.quant_strategy_settings.is_empty());
         assert!(payload.quant_signals.is_empty());
         assert!(payload.quant_intraday_t_state.is_empty());
+    }
+
+    #[test]
+    fn export_omits_device_local_secrets() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_schema(&conn);
+        for (key, value) in [
+            ("ai_api_key", "sk-secret"),
+            ("app_lock_enabled", "true"),
+            ("app_lock_hash", "$2b$hash"),
+            ("currency", "CNY"),
+        ] {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )
+            .unwrap();
+        }
+
+        let payload = export_payload_from_conn(&conn).unwrap();
+
+        assert_eq!(payload.settings, vec![("currency".into(), "CNY".into())]);
+    }
+
+    #[test]
+    fn import_preserves_local_secrets_and_ignores_secrets_from_backup() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_schema(&conn);
+        conn.execute_batch(
+            "INSERT INTO settings VALUES ('ai_api_key', 'local-key');
+             INSERT INTO settings VALUES ('app_lock_enabled', 'true');
+             INSERT INTO settings VALUES ('app_lock_hash', 'local-hash');
+             INSERT INTO settings VALUES ('currency', 'USD');",
+        )
+        .unwrap();
+        let mut payload = empty_export_payload();
+        payload.settings = vec![
+            ("ai_api_key".into(), "backup-key".into()),
+            ("app_lock_hash".into(), "backup-hash".into()),
+            ("currency".into(), "CNY".into()),
+        ];
+
+        import_payload_to_conn(&conn, payload).unwrap();
+
+        let setting = |key: &str| {
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get::<_, String>(0)
+            })
+            .unwrap()
+        };
+        assert_eq!(setting("ai_api_key"), "local-key");
+        assert_eq!(setting("app_lock_enabled"), "true");
+        assert_eq!(setting("app_lock_hash"), "local-hash");
+        assert_eq!(setting("currency"), "CNY");
+    }
+
+    #[test]
+    fn export_import_round_trips_budgets_and_recurring_rules() {
+        let source = Connection::open_in_memory().unwrap();
+        setup_schema(&source);
+        source
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 INSERT INTO accounts (id, name, type, balance) VALUES (10, '现金', 'cash', 100);
+                 INSERT INTO categories (id, name, type, icon) VALUES (20, '餐饮', 'expense', 'dining');
+                 INSERT INTO budgets (id, category_id, month, amount) VALUES (30, 20, '2026-08', 1200);
+                 INSERT INTO recurring_rules
+                   (id, type, amount, category_id, account_id, note, day_of_month, enabled,
+                    last_run_month, created_at)
+                   VALUES (40, 'expense', 88.5, 20, 10, '会员', 8, 0,
+                           '2026-07', '2026-01-01 09:00:00');",
+            )
+            .unwrap();
+
+        let payload = export_payload_from_conn(&source).unwrap();
+        assert_eq!(payload.budgets.len(), 1);
+        assert_eq!(payload.recurring_rules.len(), 1);
+
+        let target = Connection::open_in_memory().unwrap();
+        setup_schema(&target);
+        target.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        import_payload_to_conn(&target, payload).unwrap();
+
+        let budget: (i64, i64, String, f64) = target
+            .query_row(
+                "SELECT id, category_id, month, amount FROM budgets",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(budget, (30, 20, "2026-08".into(), 1200.0));
+
+        let rule: (i64, i64, i64, i64, Option<String>) = target
+            .query_row(
+                "SELECT id, category_id, account_id, enabled, last_run_month FROM recurring_rules",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(rule, (40, 20, 10, 0, Some("2026-07".into())));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  AutoComplete,
   Button,
   Card,
   Col,
@@ -32,6 +33,10 @@ export default function SettingsPage() {
   const [dbPath, setDbPath] = useState("");
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [aiModelOptions, setAiModelOptions] = useState<{ value: string }[]>([]);
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  const [aiModelsOpen, setAiModelsOpen] = useState(false);
+  const [aiModelFilterEnabled, setAiModelFilterEnabled] = useState(true);
   const aiEnabled = Form.useWatch("ai_enabled", form);
 
   useEffect(() => {
@@ -50,6 +55,31 @@ export default function SettingsPage() {
       }
     })();
   }, [form]);
+
+  const handleFetchAiModels = async () => {
+    const apiBase = String(form.getFieldValue("ai_api_base") ?? "").trim();
+    const apiKey = String(form.getFieldValue("ai_api_key") ?? "").trim();
+    const currentModel = String(form.getFieldValue("ai_model") ?? "").trim();
+
+    setAiModelsLoading(true);
+    try {
+      const models = await api.listAiModels(apiBase, apiKey);
+      const values = currentModel && !models.includes(currentModel) ? [currentModel, ...models] : models;
+      setAiModelOptions(values.map((value) => ({ value })));
+      if (models.length === 0) {
+        setAiModelsOpen(false);
+        message.warning("供应商未返回可用模型，可继续手动填写");
+      } else {
+        setAiModelFilterEnabled(false);
+        setAiModelsOpen(true);
+        message.success(`已获取 ${models.length} 个模型`);
+      }
+    } catch (e) {
+      message.error(`获取模型失败：${String(e)}`);
+    } finally {
+      setAiModelsLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -153,8 +183,35 @@ export default function SettingsPage() {
               <Form.Item name="ai_api_base" label="API 地址">
                 <Input placeholder="https://v2.pincc.ai/v1" readOnly={!aiEnabled} />
               </Form.Item>
-              <Form.Item name="ai_model" label="模型">
-                <Input placeholder="gpt-4o-mini" readOnly={!aiEnabled} />
+              <Form.Item label="模型">
+                <Input.Group compact>
+                  <Form.Item name="ai_model" noStyle>
+                    <AutoComplete
+                      options={aiModelOptions}
+                      placeholder="gpt-4o-mini"
+                      disabled={!aiEnabled}
+                      open={Boolean(aiEnabled && aiModelsOpen && aiModelOptions.length > 0)}
+                      style={{ width: "calc(100% - 96px)" }}
+                      filterOption={
+                        aiModelFilterEnabled
+                          ? (inputValue, option) =>
+                              String(option?.value ?? "").toLowerCase().includes(inputValue.toLowerCase())
+                          : false
+                      }
+                      onFocus={() => {
+                        if (aiModelOptions.length > 0) setAiModelsOpen(true);
+                      }}
+                      onOpenChange={setAiModelsOpen}
+                      onSearch={() => {
+                        setAiModelFilterEnabled(true);
+                      }}
+                      onSelect={() => setAiModelsOpen(false)}
+                    />
+                  </Form.Item>
+                  <Button loading={aiModelsLoading} disabled={!aiEnabled} onClick={handleFetchAiModels}>
+                    获取模型
+                  </Button>
+                </Input.Group>
               </Form.Item>
             </Card>
           </Col>
@@ -191,7 +248,7 @@ export default function SettingsPage() {
           数据库路径：{dbPath || "加载中..."}
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary">
-          建议定期导出备份。导入会覆盖当前全部数据，请谨慎操作。
+          建议定期导出备份。API Key、应用锁密码及可重新获取的行情缓存不会写入备份文件。
         </Typography.Paragraph>
         <Button icon={<DownloadOutlined />} onClick={handleExport} style={{ marginRight: 8 }}>
           导出备份
@@ -213,7 +270,7 @@ export default function SettingsPage() {
         okButtonProps={{ danger: true }}
       >
         <Typography.Paragraph>
-          导入将<strong>覆盖当前全部数据</strong>，此操作不可撤销。建议先导出当前备份。
+          导入将<strong>覆盖当前业务数据</strong>，但保留本机 API Key 和应用锁设置。此操作不可撤销，建议先导出当前备份。
         </Typography.Paragraph>
         {pendingImportFile && (
           <Typography.Text type="secondary">文件：{pendingImportFile.name}</Typography.Text>

@@ -1,0 +1,76 @@
+<h2>当天分时图的呈现方式</h2>
+<p class="subtitle">主流股票软件通常不用 5 分钟蜡烛图作为“分时”，而是用连续价格线、昨收基准线和下方成交量柱。请选择更接近你预期的方向。</p>
+
+<style>
+  .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .chart-card { padding: 18px; background: #101722; border-radius: 8px; color: #d8e3f0; min-height: 260px; }
+  .chart-card h4 { color: #f4f7fb; margin: 0 0 6px; font-size: 14px; }
+  .chart-card p { color: #91a4ba; font-size: 12px; line-height: 1.5; margin: 0 0 13px; }
+  .screen { border: 1px solid #314157; border-radius: 5px; overflow: hidden; background: #0b111a; }
+  .quote { display: flex; align-items: baseline; gap: 10px; padding: 9px 10px 7px; color: #ef5350; border-bottom: 1px solid #253349; }
+  .quote strong { font-size: 18px; }
+  .quote span { font-size: 11px; }
+  .chart { height: 132px; position: relative; border-bottom: 1px solid #253349; background: repeating-linear-gradient(to bottom, transparent 0, transparent 32px, #1b2a3b 33px); }
+  .axis { position: absolute; right: 5px; color: #8396ae; font-size: 9px; }
+  .axis.top { top: 2px; } .axis.mid { top: 59px; } .axis.bottom { bottom: 2px; }
+  .baseline { position: absolute; top: 66px; left: 0; right: 0; border-top: 1px dashed #7e8ea3; }
+  .price-line { position: absolute; inset: 12px 16px 15px 0; width: 100%; height: 103px; }
+  .volume { height: 42px; position: relative; display: flex; align-items: end; gap: 3px; padding: 0 9px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 20px, #182638 21px); }
+  .bar { width: 5px; background: #ef5350; opacity: .85; }
+  .bar.down { background: #32b4a3; }
+  .time { display: flex; justify-content: space-between; color: #8093a9; font-size: 9px; padding: 5px 9px 7px; }
+  .depth { padding: 7px 10px; font-size: 10px; color: #91a4ba; line-height: 1.7; }
+  .depth b { color: #f3f6fa; font-weight: 500; }
+  .heat { position: absolute; top: 0; right: 0; bottom: 0; width: 33%; background: linear-gradient(90deg, transparent, rgba(239,83,80,.08)); }
+  .marker { position: absolute; top: 38px; left: 53%; padding: 2px 4px; color: #fff; background: #ef5350; border-radius: 2px; font-size: 9px; }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="classic" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="chart-card">
+        <h4>经典行情软件分时</h4>
+        <p>价格线 + 昨收虚线 + 成交量，信息密度适中。</p>
+        <div class="screen">
+          <div class="quote"><strong>10.28</strong><span>+1.18%  +0.12</span></div>
+          <div class="chart"><div class="baseline"></div><span class="axis top">10.45 / +2.8%</span><span class="axis mid">10.16 / 0.0%</span><span class="axis bottom">9.87 / -2.8%</span><svg class="price-line" viewBox="0 0 240 103" preserveAspectRatio="none"><path d="M0,68 L12,58 L24,63 L40,49 L55,56 L71,40 L87,51 L102,43 L117,60 L130,54 L146,33 L162,41 L178,30 L194,34 L210,19 L225,28 L240,15" fill="none" stroke="#ef5350" stroke-width="2"/></svg></div>
+          <div class="volume"><i class="bar" style="height:16px"></i><i class="bar" style="height:28px"></i><i class="bar down" style="height:12px"></i><i class="bar" style="height:34px"></i><i class="bar down" style="height:19px"></i><i class="bar" style="height:24px"></i><i class="bar" style="height:14px"></i><i class="bar down" style="height:30px"></i><i class="bar" style="height:18px"></i></div>
+          <div class="time"><span>09:30</span><span>11:30 / 13:00</span><span>15:00</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A. 经典双图</h3><p>推荐。最符合东方财富、同花顺等用户的阅读习惯，适合当前弹窗宽度。</p></div>
+  </div>
+
+  <div class="card" data-choice="depth" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="chart-card">
+        <h4>盘口增强分时</h4>
+        <p>图表旁补充五档报价和实时指标。</p>
+        <div class="screen">
+          <div class="quote"><strong>10.28</strong><span>+1.18%</span></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr"><div><div class="chart"><div class="baseline"></div><svg class="price-line" viewBox="0 0 160 103" preserveAspectRatio="none"><path d="M0,70 L15,51 L30,63 L47,39 L63,53 L80,35 L97,45 L115,26 L132,33 L148,18 L160,24" fill="none" stroke="#ef5350" stroke-width="2"/></svg></div><div class="volume"><i class="bar" style="height:20px"></i><i class="bar down" style="height:10px"></i><i class="bar" style="height:30px"></i><i class="bar" style="height:15px"></i></div></div><div class="depth"><b>卖五 10.32</b><br>卖一 10.29<br><br><b>买一 10.28</b><br>买五 10.24</div></div>
+          <div class="time"><span>09:30</span><span>15:00</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B. 盘口增强</h3><p>交易感更强，但需新增实时盘口数据；当前行情接口未必稳定支持。</p></div>
+  </div>
+
+  <div class="card" data-choice="signals" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="chart-card">
+        <h4>量化提醒分时</h4>
+        <p>经典分时基础上标注做T关注区间。</p>
+        <div class="screen">
+          <div class="quote"><strong>10.28</strong><span>+1.18%  当前价</span></div>
+          <div class="chart"><div class="baseline"></div><div class="heat"></div><div class="marker">卖T关注</div><svg class="price-line" viewBox="0 0 240 103" preserveAspectRatio="none"><path d="M0,66 L14,54 L30,63 L45,40 L61,50 L76,35 L94,45 L111,55 L126,49 L143,27 L158,37 L173,21 L189,33 L205,16 L221,26 L240,13" fill="none" stroke="#ef5350" stroke-width="2"/></svg></div>
+          <div class="volume"><i class="bar" style="height:16px"></i><i class="bar" style="height:25px"></i><i class="bar down" style="height:13px"></i><i class="bar" style="height:31px"></i><i class="bar down" style="height:17px"></i></div>
+          <div class="time"><span>09:30</span><span>11:30 / 13:00</span><span>15:00</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C. 量化标注</h3><p>服务做T策略，但需要确定要显示哪些信号，避免图上信息过载。</p></div>
+  </div>
+</div>
