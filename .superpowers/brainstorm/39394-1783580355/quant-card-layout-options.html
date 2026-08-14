@@ -1,0 +1,91 @@
+<h2>量化提醒卡片信息展示方案</h2>
+<p class="subtitle">目标：不再出现省略号，同时保持卡片可扫读。点击你偏好的方案。</p>
+
+<style>
+  .quant-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .q-card { background: #171a22; border: 1px solid #303642; border-radius: 12px; padding: 18px; color: #f3f6fb; min-height: 380px; box-shadow: 0 0 0 1px rgba(255,255,255,.03); cursor: pointer; }
+  .q-card:hover { border-color: #5d8edc; }
+  .q-card h3 { margin: 0 0 12px; font-size: 18px; }
+  .q-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .q-name { font-size: 18px; font-weight: 700; }
+  .q-code { color: #9ca6b8; margin-top: 4px; }
+  .q-tag { color: #ff7474; background: rgba(255, 96, 96, .14); padding: 5px 10px; border-radius: 8px; white-space: nowrap; }
+  .q-price { font-size: 34px; font-weight: 750; margin: 28px 0; }
+  .q-meta { color: #aab3c3; background: #151923; border-radius: 10px; padding: 14px; }
+  .q-row { display: flex; gap: 8px; margin: 8px 0; line-height: 1.45; }
+  .q-label { color: #7f8999; white-space: nowrap; }
+  .q-value { color: #c4ccda; overflow-wrap: anywhere; }
+  .q-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+  .q-grid .q-row { display: block; margin: 0; }
+  .q-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #262b35; }
+  .q-controls { margin-top: 18px; color: #aab3c3; display: flex; flex-wrap: wrap; gap: 16px; }
+  .q-pill { border: 1px solid #333a47; border-radius: 8px; padding: 5px 10px; color: #f3f6fb; }
+  .q-note { margin-top: 12px; color: #7f8999; font-size: 13px; line-height: 1.45; }
+  @media (max-width: 1100px) { .quant-options { grid-template-columns: 1fr; } }
+</style>
+
+<div class="quant-options">
+  <div class="q-card option" data-choice="wrap-two-column" onclick="toggleSelect(this)">
+    <h3>A. 两列保留，但允许换行</h3>
+    <div class="q-head">
+      <div><div class="q-name">世嘉科技</div><div class="q-code">002796 · cn</div></div>
+      <div class="q-tag">观望</div>
+    </div>
+    <div class="q-price">¥33.70</div>
+    <div class="q-meta q-grid">
+      <div class="q-row"><span class="q-label">趋势</span><br><span class="q-value">空头</span></div>
+      <div class="q-row"><span class="q-label">日内位置</span><br><span class="q-value">95%</span></div>
+      <div class="q-row"><span class="q-label">卖T窗口</span><br><span class="q-value">09:30-09:45</span></div>
+      <div class="q-row"><span class="q-label">买回窗口</span><br><span class="q-value">09:30-09:45、13:00-13:30、14:35-15:00</span></div>
+      <div class="q-row"><span class="q-label">理由</span><br><span class="q-value">未进入高发时段或日内位置未达阈值</span></div>
+      <div class="q-row"><span class="q-label">触发</span><br><span class="q-value">--</span></div>
+      <div class="q-row"><span class="q-label">行情</span><br><span class="q-value">2026/7/9 14:52:33</span></div>
+    </div>
+    <div class="q-controls"><span>模式 <span class="q-pill">做T</span></span><span>启用 开</span><span>桌面提醒 开</span></div>
+    <div class="q-note">改动最小。信息完整，但做T卡片会比自动网格卡片更高。</div>
+  </div>
+
+  <div class="q-card option" data-choice="grouped-vertical" onclick="toggleSelect(this)">
+    <h3>B. 分组纵向展示</h3>
+    <div class="q-head">
+      <div><div class="q-name">世嘉科技</div><div class="q-code">002796 · cn</div></div>
+      <div class="q-tag">观望</div>
+    </div>
+    <div class="q-price">¥33.70</div>
+    <div class="q-meta">
+      <div class="q-row"><span class="q-label">趋势</span><span class="q-value">空头</span></div>
+      <div class="q-row"><span class="q-label">日内位置</span><span class="q-value">95%</span></div>
+      <div class="q-section">
+        <div class="q-row"><span class="q-label">卖T窗口</span><span class="q-value">09:30-09:45</span></div>
+        <div class="q-row"><span class="q-label">买回窗口</span><span class="q-value">09:30-09:45、13:00-13:30、14:35-15:00</span></div>
+      </div>
+      <div class="q-section">
+        <div class="q-row"><span class="q-label">理由</span><span class="q-value">未进入高发时段或日内位置未达阈值</span></div>
+        <div class="q-row"><span class="q-label">行情</span><span class="q-value">2026/7/9 14:52:33</span></div>
+      </div>
+    </div>
+    <div class="q-controls"><span>模式 <span class="q-pill">做T</span></span><span>启用 开</span><span>桌面提醒 开</span></div>
+    <div class="q-note">可读性最好。更适合做T这种长字段，但整体卡片更像详情面板。</div>
+  </div>
+
+  <div class="q-card option" data-choice="compact-priority" onclick="toggleSelect(this)">
+    <h3>C. 重点信息优先</h3>
+    <div class="q-head">
+      <div><div class="q-name">中远海控</div><div class="q-code">601919 · cn</div></div>
+      <div class="q-tag">买入关注</div>
+    </div>
+    <div class="q-price">¥13.92</div>
+    <div class="q-meta">
+      <div class="q-grid">
+        <div class="q-row"><span class="q-label">趋势</span><br><span class="q-value">多头</span></div>
+        <div class="q-row"><span class="q-label">触发区</span><br><span class="q-value">买一区</span></div>
+      </div>
+      <div class="q-section">
+        <div class="q-row"><span class="q-label">触发</span><span class="q-value">2026/7/9 14:47:20</span></div>
+        <div class="q-row"><span class="q-label">行情</span><span class="q-value">2026/7/9 14:52:33</span></div>
+      </div>
+    </div>
+    <div class="q-controls"><span>模式 <span class="q-pill">自动网格</span></span><span>启用 开</span><span>桌面提醒 开</span></div>
+    <div class="q-note">卡片最紧凑。只展示判断所需核心字段，长解释留给详情/tooltip。</div>
+  </div>
+</div>
